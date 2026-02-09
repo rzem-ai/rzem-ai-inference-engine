@@ -5,31 +5,36 @@
 #   city96/FLUX.1-dev-gguf/flux1-dev-Q8_0.gguf
 #
 # Text encoders and VAE come from the BFL repo (safetensors).
+#
+#
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 source "$SCRIPT_DIR/_activate.sh"
 
-FLUX1_TRANSFORMER="${FLUX1_TRANSFORMER:-city96/FLUX.1-dev-gguf/flux1-dev-Q8_0.gguf}"
-BFL_REPO="${BFL_REPO:-black-forest-labs/FLUX.1-dev}"
+TRANSFORMER="${TRANSFORMER:-city96/FLUX.1-dev-gguf/flux1-dev-Q8_0.gguf}"
+TEXT_ENCODER="${TEXT_ENCODER:-black-forest-labs/FLUX.1-dev}"
+VAE_MODEL="${VAE_MODEL:-black-forest-labs/FLUX.1-dev}"
 OUTPUT="${OUTPUT:-output_flux1_gguf_$(date +%s).png}"
 
 echo "=== Testing FLUX.1 Dev Pipeline (GGUF transformer) ==="
-echo "Transformer: $FLUX1_TRANSFORMER"
-echo "Text/VAE:    $BFL_REPO"
-echo "Output:      $OUTPUT"
+echo "Transformer:  $TRANSFORMER"
+echo "Text encoder: $TEXT_ENCODER"
+echo "VAE:          $VAE_MODEL"
+echo "Output:       $OUTPUT"
 echo ""
 
 inference-engine generate \
     --prompt "a cat sitting on a windowsill, golden hour lighting, photorealistic" \
-    --transformer-model "$FLUX1_TRANSFORMER" \
+    --transformer-model "$TRANSFORMER" \
     --transformer-type flux1_dev \
-    --clip-tokenizer "$BFL_REPO" \
-    --clip-encoder "$BFL_REPO" \
-    --t5-tokenizer "$BFL_REPO" \
-    --t5-encoder "$BFL_REPO" \
-    --vae-model "$BFL_REPO" \
+    --clip-tokenizer "$TEXT_ENCODER" \
+    --clip-encoder "$TEXT_ENCODER" \
+    --t5-tokenizer "$TEXT_ENCODER" \
+    --t5-encoder "$TEXT_ENCODER" \
+    --vae-model "$VAE_MODEL" \
     --steps 20 \
     --cfg-scale 3.5 \
     --width 1024 \

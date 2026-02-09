@@ -12,21 +12,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 source "$SCRIPT_DIR/_activate.sh"
 
-QWEN_IMAGE_REPO="${QWEN_IMAGE_REPO:-Qwen/Qwen-Image}"
+TRANSFORMER="${TRANSFORMER:-Qwen/Qwen-Image}"
 OUTPUT="${OUTPUT:-output_qwen_image_$(date +%s).png}"
 
 echo "=== Testing Qwen-Image Pipeline ==="
-echo "Repo:   $QWEN_IMAGE_REPO"
+echo "Repo:   $TRANSFORMER"
 echo "Output: $OUTPUT"
 echo ""
 
 inference-engine generate \
     --prompt "a photorealistic portrait of a woman reading a book in a cozy library" \
-    --transformer-model "$QWEN_IMAGE_REPO" \
+    --transformer-model "$TRANSFORMER" \
     --transformer-type qwen_image \
-    --qwen3-tokenizer "$QWEN_IMAGE_REPO" \
-    --qwen3-encoder "$QWEN_IMAGE_REPO" \
-    --vae-model "$QWEN_IMAGE_REPO" \
+    --qwen3-tokenizer "$TRANSFORMER" \
+    --qwen3-encoder "$TRANSFORMER" \
+    --vae-model "$TRANSFORMER" \
     --steps 50 \
     --cfg-scale 4.0 \
     --width 1024 \

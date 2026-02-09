@@ -9,23 +9,23 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 source "$SCRIPT_DIR/_activate.sh"
 
-BFL_REPO="${BFL_REPO:-black-forest-labs/FLUX.1-dev}"
+TRANSFORMER="${TRANSFORMER:-black-forest-labs/FLUX.1-dev}"
 OUTPUT="${OUTPUT:-output_flux1_$(date +%s).png}"
 
 echo "=== Testing FLUX.1 Dev Pipeline (BFL repo) ==="
-echo "Repo:   $BFL_REPO"
+echo "Repo:   $TRANSFORMER"
 echo "Output: $OUTPUT"
 echo ""
 
 inference-engine generate \
     --prompt "a cat sitting on a windowsill, golden hour lighting, photorealistic" \
-    --transformer-model "$BFL_REPO" \
+    --transformer-model "$TRANSFORMER" \
     --transformer-type flux1_dev \
-    --clip-tokenizer "$BFL_REPO" \
-    --clip-encoder "$BFL_REPO" \
-    --t5-tokenizer "$BFL_REPO" \
-    --t5-encoder "$BFL_REPO" \
-    --vae-model "$BFL_REPO" \
+    --clip-tokenizer "$TRANSFORMER" \
+    --clip-encoder "$TRANSFORMER" \
+    --t5-tokenizer "$TRANSFORMER" \
+    --t5-encoder "$TRANSFORMER" \
+    --vae-model "$TRANSFORMER" \
     --steps 20 \
     --cfg-scale 3.5 \
     --width 1024 \

@@ -38,7 +38,11 @@ run_test() {
 }
 
 run_test "FLUX.1 Dev"   "$SCRIPT_DIR/test_flux1.sh"
+run_test "FLUX.1 Dev"   "$SCRIPT_DIR/test_flux1_gguf.sh"
+run_test "FLUX.1 Dev"   "$SCRIPT_DIR/test_flux1_alt.sh"
 run_test "FLUX.2 Dev"   "$SCRIPT_DIR/test_flux2.sh"
+run_test "FLUX.2 Dev"   "$SCRIPT_DIR/test_flux2_gguf.sh"
+run_test "FLUX.2 Dev"   "$SCRIPT_DIR/test_flux2_alt.sh"
 run_test "Z-Image"      "$SCRIPT_DIR/test_zimage.sh"
 run_test "Qwen-Image"   "$SCRIPT_DIR/test_qwen_image.sh"
 
