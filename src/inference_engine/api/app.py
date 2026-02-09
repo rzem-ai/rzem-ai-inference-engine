@@ -1,0 +1,66 @@
+"""FastAPI application factory and WebSocket endpoint."""
+
+from __future__ import annotations
+
+import asyncio
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from loguru import logger
+
+from inference_engine.api.routes import router
+from inference_engine.api.state import JobStateStore
+from inference_engine.api.ws import ConnectionManager
+
+
+def create_app(
+    device: str = "auto",
+    vram_limit_gb: float | None = None,
+    output_dir: str = "./output",
+) -> FastAPI:
+    """Create the FastAPI application with engine lifecycle management."""
+
+    _output_dir = Path(output_dir).resolve()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Import engine lazily (pulls in torch)
+        from inference_engine.engine import InferenceEngine
+
+        logger.info(f"Starting inference engine (device={device})")
+        engine = InferenceEngine(device=device, vram_limit_gb=vram_limit_gb)
+
+        ws_manager = ConnectionManager()
+        loop = asyncio.get_running_loop()
+        store = JobStateStore(engine, ws_manager, _output_dir, loop)
+
+        # Attach to app state for route handlers
+        app.state.engine = engine
+        app.state.store = store
+        app.state.ws_manager = ws_manager
+
+        yield
+
+        logger.info("Shutting down inference engine")
+        engine.shutdown()
+
+    app = FastAPI(
+        title="Inference Engine API",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    app.include_router(router)
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket):
+        manager: ConnectionManager = app.state.ws_manager
+        await manager.connect(websocket)
+        try:
+            # Keep the connection alive; we only broadcast, not receive.
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            manager.disconnect(websocket)
+
+    return app

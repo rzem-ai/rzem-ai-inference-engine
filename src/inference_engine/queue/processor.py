@@ -64,6 +64,7 @@ class JobProcessor:
 
                 # Build progress callback
                 def progress_cb(event: ProgressEvent) -> None:
+                    event.job_id = job_id
                     self._emit(EventType.JOB_PROGRESS, event)
 
                 # Run the pipeline

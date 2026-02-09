@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
-# Test FLUX.2 Dev pipeline via CLI.
+# Test FLUX.2 Dev pipeline with a GGUF-quantized transformer.
+#
+# Uses Mistral3 for text encoding (passed via --qwen3-* CLI params).
+# GGUF transformer from city96, Mistral3 text encoder from unsloth.
 #
 # Required models (set via environment variables or edit the defaults below):
-#   FLUX2_TRANSFORMER  - Path to FLUX.2 Dev transformer
-#   QWEN3_MODEL        - Qwen3 tokenizer + encoder (e.g. Qwen/Qwen3-8B)
-#   VAE_MODEL          - FLUX.2 VAE (32 channels)
+#   FLUX2_TRANSFORMER  - GGUF quantized FLUX.2 transformer
+#   TEXT_ENCODER       - Mistral3 text encoder (HF repo or GGUF)
+#   VAE_MODEL          - FLUX.2 VAE (32 channels with BatchNorm)
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-source "$SCRIPT_DIR/_activate.sh"
+FLUX2_TRANSFORMER="${FLUX2_TRANSFORMER:-city96/FLUX.2-dev-gguf/flux2-dev-Q8_0.gguf}"
+TEXT_ENCODER="${TEXT_ENCODER:-mistralai/Mistral-Small-3.2-24B-Instruct-2506}"
+VAE_MODEL="${VAE_MODEL:-Comfy-Org/flux2-dev/split_files/vae/flux2-vae.safetensors}"
+OUTPUT="${OUTPUT:-output_flux2_gguf_$(date +%s).png}"
 
-FLUX2_TRANSFORMER="${FLUX2_TRANSFORMER:-black-forest-labs/FLUX.2-dev}"
-QWEN3_MODEL="${QWEN3_MODEL:-Qwen/Qwen3-8B}"
-VAE_MODEL="${VAE_MODEL:-black-forest-labs/FLUX.2-dev}"
-OUTPUT="${OUTPUT:-output_flux2_$(date +%s).png}"
-
-echo "=== Testing FLUX.2 Dev Pipeline ==="
-echo "Transformer: $FLUX2_TRANSFORMER"
-echo "Qwen3:       $QWEN3_MODEL"
-echo "Output:      $OUTPUT"
+echo "=== Testing FLUX.2 Dev Pipeline (GGUF transformer) ==="
+echo "Transformer:  $FLUX2_TRANSFORMER"
+echo "Text encoder: $TEXT_ENCODER"
+echo "VAE:          $VAE_MODEL"
+echo "Output:       $OUTPUT"
 echo ""
 
 inference-engine generate \
     --prompt "a serene Japanese garden with cherry blossoms and a koi pond" \
     --transformer-model "$FLUX2_TRANSFORMER" \
     --transformer-type flux2_dev \
-    --qwen3-tokenizer "$QWEN3_MODEL" \
-    --qwen3-encoder "$QWEN3_MODEL" \
+    --qwen3-tokenizer "$TEXT_ENCODER" \
+    --qwen3-encoder "$TEXT_ENCODER" \
     --vae-model "$VAE_MODEL" \
     --steps 4 \
     --cfg-scale 1.0 \

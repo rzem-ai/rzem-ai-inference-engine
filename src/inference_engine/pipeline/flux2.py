@@ -1,10 +1,8 @@
-"""FLUX.2 Dev pipeline — Qwen3 multi-layer encoding, 32-channel VAE, BN normalization.
+"""FLUX.2 Dev pipeline — Mistral 3 text encoding, Flux2Transformer2DModel, AutoencoderKLFlux2.
 
-FLUX.2 Klein differs from FLUX.1 in several key ways:
-- Qwen3 replaces CLIP+T5; hidden states from layers (9, 18, 27) are stacked
-- VAE has 32 latent channels with batch normalization on the packed representation
-- 4D position IDs (T, H, W, L) with int64 dtype
-- Empirical mu computation for schedule shifting
+Uses Mistral 3 (not Qwen3) as text encoder with multi-layer hidden state extraction
+from layers (10, 20, 30). VAE is AutoencoderKLFlux2 with batch normalization.
+Guidance-distilled (guidance scale as embedding, no true CFG).
 """
 
 from __future__ import annotations
@@ -12,6 +10,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Callable
 
+import numpy as np
 import torch
 from loguru import logger
 
@@ -26,8 +25,16 @@ if TYPE_CHECKING:
     from inference_engine.models.cache import ModelCache
     from inference_engine.types import JobParams
 
-# Hidden state layers to extract and stack for Klein-style encoding
-KLEIN_EXTRACTION_LAYERS = (9, 18, 27)
+
+# System message from the official FLUX.2 reference
+SYSTEM_MESSAGE = (
+    "You are an AI that reasons about image descriptions. You give structured "
+    "responses focusing on object relationships, object attribution and actions "
+    "without speculation."
+)
+
+# Hidden state layers to extract from Mistral 3
+HIDDEN_STATE_LAYERS = (10, 20, 30)
 
 
 def _cache_key(path: str, role: str) -> str:
@@ -35,13 +42,15 @@ def _cache_key(path: str, role: str) -> str:
 
 
 class Flux2DevPipeline(BasePipeline):
-    """FLUX.2 Dev: Qwen3 encoder, Flux2Transformer2DModel, 32-ch VAE with BN.
+    """FLUX.2 Dev: Mistral 3 encoder, Flux2Transformer2DModel, AutoencoderKLFlux2 with BN.
 
-    Differences from FLUX.1:
-    - Qwen3 replaces CLIP+T5 — stacks layers (9, 18, 27) for richer encoding
-    - VAE has 32 latent channels with batch normalization
-    - 4D position IDs (T, H, W, L) with int64 dtype
-    - Empirical mu for schedule shifting
+    Key differences from FLUX.1:
+    - Text encoder is Mistral 3 (not CLIP+T5)
+    - Multi-layer hidden state extraction from layers (10, 20, 30)
+    - VAE is AutoencoderKLFlux2 with batch normalization on patchified latents
+    - Patchify/unpatchify instead of FLUX.1-style 2x2 pack/unpack
+    - Guidance-distilled (guidance scale as embedding, no true CFG)
+    - 4D position IDs (T, H, W, L) via cartesian product
     """
 
     def validate_params(self, params: JobParams) -> None:
@@ -55,9 +64,9 @@ class Flux2DevPipeline(BasePipeline):
 
     def get_required_models(self, params: JobParams) -> list[ModelSpec]:
         return [
-            ModelSpec(key=_cache_key(params.qwen3_encoder, "qwen3"), loader=lambda: None, estimated_size_bytes=8_000_000_000),
+            ModelSpec(key=_cache_key(params.qwen3_encoder, "qwen3"), loader=lambda: None, estimated_size_bytes=15_000_000_000),
             ModelSpec(key=_cache_key(params.transformer_model, "transformer"), loader=lambda: None, estimated_size_bytes=23_000_000_000),
-            ModelSpec(key=_cache_key(params.vae_model, "vae"), loader=lambda: None, estimated_size_bytes=200_000_000),
+            ModelSpec(key=_cache_key(params.vae_model, "vae"), loader=lambda: None, estimated_size_bytes=500_000_000),
         ]
 
     def run(
@@ -67,7 +76,7 @@ class Flux2DevPipeline(BasePipeline):
         progress_cb: Callable[[ProgressEvent], None],
     ) -> tuple[PIL.Image.Image, int]:
         import PIL.Image
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers import AutoProcessor, Mistral3ForConditionalGeneration
 
         device = cache._device
         dtype = torch.bfloat16
@@ -75,7 +84,7 @@ class Flux2DevPipeline(BasePipeline):
         seed = params.seed if params.seed >= 0 else torch.randint(0, 2**32, (1,)).item()
         generator = torch.Generator(device="cpu").manual_seed(seed)
 
-        # ── Load Qwen3 tokenizer + encoder ───────────────────────────
+        # ── Load processor (tokenizer) and text encoder (Mistral 3) ──
         def _resolve_sub(path_or_repo: str, subfolder: str):
             path = ModelLoader.resolve_path(path_or_repo)
             if path.is_dir():
@@ -84,16 +93,16 @@ class Flux2DevPipeline(BasePipeline):
                     return sub
             return path
 
-        qwen3_tok = cache.get_or_load(
+        processor = cache.get_or_load(
             _cache_key(params.qwen3_tokenizer, "qwen3_tokenizer"),
-            lambda: AutoTokenizer.from_pretrained(
+            lambda: AutoProcessor.from_pretrained(
                 _resolve_sub(params.qwen3_tokenizer, "tokenizer"),
             ),
         )
 
-        qwen3_enc = cache.get_or_load(
+        text_encoder = cache.get_or_load(
             _cache_key(params.qwen3_encoder, "qwen3_encoder"),
-            lambda: AutoModelForCausalLM.from_pretrained(
+            lambda: Mistral3ForConditionalGeneration.from_pretrained(
                 _resolve_sub(params.qwen3_encoder, "text_encoder"),
                 torch_dtype=dtype,
             ),
@@ -101,37 +110,37 @@ class Flux2DevPipeline(BasePipeline):
 
         # ── Load Flux2 Transformer ───────────────────────────────────
         def _load_transformer():
-            from diffusers import FluxTransformer2DModel
+            from diffusers import Flux2Transformer2DModel
             path = ModelLoader.resolve_path(params.transformer_model)
             if path.is_file():
-                return FluxTransformer2DModel.from_single_file(str(path), torch_dtype=dtype)
+                return Flux2Transformer2DModel.from_single_file(str(path), torch_dtype=dtype)
             sub = path / "transformer"
             if sub.exists():
                 path = sub
-            return FluxTransformer2DModel.from_pretrained(str(path), torch_dtype=dtype)
+            return Flux2Transformer2DModel.from_pretrained(str(path), torch_dtype=dtype)
 
         transformer = cache.get_or_load(
             _cache_key(params.transformer_model, "transformer"),
             _load_transformer,
         )
 
-        # ── Load VAE (32 latent channels) ────────────────────────────
+        # ── Load VAE (FLUX.2-specific with batch norm) ───────────────
         def _load_vae():
-            from diffusers import AutoencoderKL
+            from diffusers import AutoencoderKLFlux2
             path = ModelLoader.resolve_path(params.vae_model)
             if path.is_file():
-                return AutoencoderKL.from_single_file(str(path), torch_dtype=dtype)
+                return AutoencoderKLFlux2.from_single_file(str(path), torch_dtype=dtype)
             sub = path / "vae"
             if sub.exists():
                 path = sub
-            return AutoencoderKL.from_pretrained(str(path), torch_dtype=dtype)
+            return AutoencoderKLFlux2.from_pretrained(str(path), torch_dtype=dtype)
 
         vae = cache.get_or_load(
             _cache_key(params.vae_model, "vae"),
             _load_vae,
         )
 
-        # Lock models
+        # Lock all models
         keys = [
             _cache_key(params.qwen3_tokenizer, "qwen3_tokenizer"),
             _cache_key(params.qwen3_encoder, "qwen3_encoder"),
@@ -150,8 +159,8 @@ class Flux2DevPipeline(BasePipeline):
 
             image = self._generate(
                 params=params,
-                qwen3_tok=qwen3_tok,
-                qwen3_enc=qwen3_enc,
+                processor=processor,
+                text_encoder=text_encoder,
                 transformer=transformer,
                 vae=vae,
                 device=device,
@@ -169,12 +178,64 @@ class Flux2DevPipeline(BasePipeline):
 
         return image, seed
 
+    def _encode_prompt(
+        self,
+        prompt: str,
+        processor,
+        text_encoder,
+        device: torch.device,
+        dtype: torch.dtype,
+        max_seq_len: int = 512,
+    ) -> torch.Tensor:
+        """Encode text using Mistral 3 with multi-layer hidden state extraction.
+
+        Returns prompt_embeds of shape (B, seq_len, num_layers * hidden_dim).
+        """
+        messages = [[
+            {"role": "system", "content": [{"type": "text", "text": SYSTEM_MESSAGE}]},
+            {"role": "user", "content": [{"type": "text", "text": prompt}]},
+        ]]
+
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=False,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=max_seq_len,
+        )
+
+        input_ids = inputs["input_ids"].to(device)
+        attention_mask = inputs["attention_mask"].to(device)
+
+        with torch.no_grad():
+            output = text_encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+                use_cache=False,
+            )
+
+        # Stack hidden states from extraction layers
+        out = torch.stack([output.hidden_states[k] for k in HIDDEN_STATE_LAYERS], dim=1)
+        out = out.to(dtype=dtype, device=device)
+
+        # Reshape: (B, num_layers, seq, dim) → (B, seq, num_layers * dim)
+        batch_size, num_layers, seq_len, hidden_dim = out.shape
+        prompt_embeds = out.permute(0, 2, 1, 3).reshape(
+            batch_size, seq_len, num_layers * hidden_dim
+        )
+
+        return prompt_embeds
+
     def _generate(
         self,
         *,
         params: JobParams,
-        qwen3_tok,
-        qwen3_enc,
+        processor,
+        text_encoder,
         transformer,
         vae,
         device: torch.device,
@@ -185,69 +246,68 @@ class Flux2DevPipeline(BasePipeline):
     ) -> PIL.Image.Image:
         import PIL.Image
 
-        # ── 1. Text encoding via Qwen3 (Klein-style multi-layer) ────
-        prompt_embeds, pooled_prompt_embeds = self._encode_qwen3_klein(
-            params.prompt, qwen3_tok, qwen3_enc, device, dtype
+        # ── 1. Text encoding ─────────────────────────────────────────
+        prompt_embeds = self._encode_prompt(
+            params.prompt, processor, text_encoder, device, dtype
         )
 
-        # ── 2. Prepare latent noise (32 channels for FLUX.2) ────────
-        latent_channels = 32
-        latent_h = math.ceil(params.height / 16) * 2
-        latent_w = math.ceil(params.width / 16) * 2
+        # Text position IDs: (B, seq_len, 4) — T=0, H=0, W=0, L=0..seq_len-1
+        text_ids = self._prepare_text_ids(prompt_embeds, device)
 
+        # ── 2. Prepare latent noise in patchified space ──────────────
+        vae_scale_factor = (
+            2 ** (len(vae.config.block_out_channels) - 1)
+            if hasattr(vae.config, "block_out_channels")
+            else 8
+        )
+        num_channels = transformer.config.in_channels // 4
+
+        latent_h = 2 * (params.height // (vae_scale_factor * 2))
+        latent_w = 2 * (params.width // (vae_scale_factor * 2))
+
+        # Noise in patchified space: (B, C*4, H//2, W//2)
         latents = torch.randn(
-            (1, latent_channels, latent_h, latent_w),
+            (1, num_channels * 4, latent_h // 2, latent_w // 2),
             generator=generator,
             dtype=dtype,
             device="cpu",
         ).to(device)
 
-        # ── 3. Time schedule with empirical mu ───────────────────────
-        num_steps = params.steps
-        packed_h = latent_h // 2
-        packed_w = latent_w // 2
-        image_seq_len = packed_h * packed_w
+        # Position IDs for the patchified grid
+        latent_ids = self._prepare_latent_ids(latents, device)
 
-        mu = self._compute_empirical_mu(image_seq_len, num_steps)
-        sigmas = self._get_schedule(num_steps)
-
-        # ── 4. Pack latents ──────────────────────────────────────────
+        # Pack: (B, C, H, W) → (B, H*W, C)
         latents = self._pack_latents(latents)
 
-        # ── 5. BN normalization (if VAE has batch norm) ──────────────
-        bn_mean, bn_std = self._get_bn_stats(vae)
-        if bn_mean is not None and bn_std is not None:
-            latents = self._bn_normalize(latents, bn_mean, bn_std)
+        # ── 3. Time schedule with empirical mu ───────────────────────
+        num_steps = params.steps
+        image_seq_len = latents.shape[1]
+        mu = self._compute_empirical_mu(image_seq_len, num_steps)
+        sigmas = self._get_sigmas(mu, num_steps)
 
-        # ── 6. Position IDs (4D: T, H, W, L — int64) ────────────────
-        img_ids = self._generate_image_ids_4d(latent_h, latent_w, device)
+        # ── 4. Guidance embedding ────────────────────────────────────
+        guidance = torch.full([1], params.cfg_scale, device=device, dtype=torch.float32)
+        guidance = guidance.expand(latents.shape[0])
 
-        # Text position IDs: 4D, only L coordinate varies
-        seq_len = prompt_embeds.shape[1]
-        txt_ids = torch.zeros(1, seq_len, 4, device=device, dtype=torch.long)
-        txt_ids[..., 3] = torch.arange(seq_len, device=device, dtype=torch.long)
-
-        # ── 7. Denoising ─────────────────────────────────────────────
+        # ── 5. Denoising loop ────────────────────────────────────────
         with torch.no_grad():
             for i in range(num_steps):
-                t_curr = sigmas[i]
-                t_next = sigmas[i + 1]
-                timestep = torch.tensor([t_curr], device=device, dtype=dtype).expand(latents.shape[0]) * 1000.0
+                sigma_curr = sigmas[i]
+                sigma_next = sigmas[i + 1]
+                timestep = torch.tensor([sigma_curr], device=device, dtype=dtype)
 
                 noise_pred = transformer(
                     hidden_states=latents,
                     timestep=timestep,
+                    guidance=guidance,
                     encoder_hidden_states=prompt_embeds,
-                    pooled_projections=pooled_prompt_embeds,
-                    txt_ids=txt_ids,
-                    img_ids=img_ids,
+                    txt_ids=text_ids,
+                    img_ids=latent_ids,
                     return_dict=False,
                 )[0]
 
-                if not math.isclose(params.cfg_scale, 1.0):
-                    noise_pred = noise_pred * params.cfg_scale
-
-                dt = t_next - t_curr
+                # Euler step
+                dt = sigma_next - sigma_curr
                 latents = latents + dt * noise_pred
 
                 progress_cb(ProgressEvent(
@@ -256,14 +316,19 @@ class Flux2DevPipeline(BasePipeline):
                     total_steps=num_steps,
                 ))
 
-        # ── 8. BN denormalization ────────────────────────────────────
-        if bn_mean is not None and bn_std is not None:
-            latents = self._bn_denormalize(latents, bn_mean, bn_std)
+        # ── 6. Unpack → BN denormalize → unpatchify → decode ────────
+        latents = self._unpack_latents(latents, latent_h // 2, latent_w // 2)
 
-        # ── 9. Unpack and decode ─────────────────────────────────────
-        latents = self._unpack_latents(latents, latent_h, latent_w, latent_channels)
+        # BN denormalization using VAE batch norm stats
+        bn_mean = vae.bn.running_mean.view(1, -1, 1, 1).to(latents.device, latents.dtype)
+        bn_std = torch.sqrt(
+            vae.bn.running_var.view(1, -1, 1, 1) + vae.config.batch_norm_eps
+        ).to(latents.device, latents.dtype)
+        latents = latents * bn_std + bn_mean
 
-        latents = (latents / vae.config.scaling_factor) + vae.config.shift_factor
+        # Unpatchify: (B, C*4, H//2, W//2) → (B, C, H, W)
+        latents = self._unpatchify_latents(latents)
+
         with torch.no_grad():
             decoded = vae.decode(latents, return_dict=False)[0]
 
@@ -273,125 +338,61 @@ class Flux2DevPipeline(BasePipeline):
         decoded = (decoded.float().cpu().numpy() * 255).round().astype("uint8")
         return PIL.Image.fromarray(decoded)
 
-    # ── Text encoding ────────────────────────────────────────────────
+    # ── Helpers ──────────────────────────────────────────────────────
 
     @staticmethod
-    def _encode_qwen3_klein(
-        prompt: str,
-        tokenizer,
-        model,
+    def _prepare_text_ids(
+        prompt_embeds: torch.Tensor,
         device: torch.device,
-        dtype: torch.dtype,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Encode text using Qwen3 with Klein-style multi-layer extraction.
-
-        Extracts hidden states from layers (9, 18, 27), stacks and reshapes
-        to (batch, seq_len, hidden_size * 3). Also produces a mean-pooled
-        embedding for global conditioning.
-
-        Returns (stacked_embeds, pooled_embeds).
-        """
-        # Apply chat template — Klein disables thinking
-        messages = [{"role": "user", "content": prompt}]
-        try:
-            text = tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True,
-                enable_thinking=False,
+    ) -> torch.Tensor:
+        """Generate 4D text position IDs: T=0, H=0, W=0, L=0..seq_len-1."""
+        B, L, _ = prompt_embeds.shape
+        out_ids = []
+        for _ in range(B):
+            coords = torch.cartesian_prod(
+                torch.arange(1), torch.arange(1),
+                torch.arange(1), torch.arange(L),
             )
-        except (AttributeError, TypeError):
-            text = prompt
+            out_ids.append(coords)
+        return torch.stack(out_ids).to(device)
 
-        inputs = tokenizer(
-            text,
-            padding="max_length",
-            max_length=512,
-            truncation=True,
-            return_tensors="pt",
-        ).to(device)
-
-        with torch.no_grad():
-            outputs = model(
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                output_hidden_states=True,
-                use_cache=False,
-            )
-
-        num_hidden_layers = len(outputs.hidden_states)
-
-        # Stack hidden states from extraction layers
-        hidden_states_list = []
-        for layer_idx in KLEIN_EXTRACTION_LAYERS:
-            idx = min(layer_idx, num_hidden_layers - 1)
-            hidden_states_list.append(outputs.hidden_states[idx])
-
-        # Stack: (batch, num_layers, seq_len, hidden_dim)
-        out = torch.stack(hidden_states_list, dim=1)
-        out = out.to(dtype=dtype, device=device)
-
-        # Reshape: (batch, seq_len, hidden_dim * num_layers)
-        batch_size, num_channels, seq_len, hidden_dim = out.shape
-        prompt_embeds = out.permute(0, 2, 1, 3).reshape(
-            batch_size, seq_len, num_channels * hidden_dim
+    @staticmethod
+    def _prepare_latent_ids(
+        latents: torch.Tensor,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Generate 4D latent position IDs: T=0, H=0..h-1, W=0..w-1, L=0."""
+        B, _, H, W = latents.shape
+        latent_ids = torch.cartesian_prod(
+            torch.arange(1), torch.arange(H),
+            torch.arange(W), torch.arange(1),
         )
-
-        # Pooled embedding: mean over non-padding tokens of last hidden state
-        last_hidden_state = outputs.hidden_states[-1]
-        attention_mask = inputs["attention_mask"].unsqueeze(-1).float()
-        expanded_mask = attention_mask.expand_as(last_hidden_state)
-        sum_embeds = (last_hidden_state * expanded_mask).sum(dim=1)
-        num_tokens = expanded_mask.sum(dim=1).clamp(min=1)
-        pooled_embeds = (sum_embeds / num_tokens).to(dtype)
-
-        return prompt_embeds, pooled_embeds
-
-    # ── BN normalization ─────────────────────────────────────────────
+        return latent_ids.unsqueeze(0).expand(B, -1, -1).to(device)
 
     @staticmethod
-    def _get_bn_stats(vae) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-        """Extract batch norm statistics from the VAE if available."""
-        bn_layer = None
-        for attr in ("bn", "batch_norm"):
-            if hasattr(vae, attr):
-                bn_layer = getattr(vae, attr)
-                break
-            if hasattr(vae, "encoder") and hasattr(vae.encoder, attr):
-                bn_layer = getattr(vae.encoder, attr)
-                break
-
-        if bn_layer is None or bn_layer.running_mean is None or bn_layer.running_var is None:
-            return None, None
-
-        bn_mean = bn_layer.running_mean.clone()
-        bn_var = bn_layer.running_var.clone()
-        bn_eps = getattr(bn_layer, "eps", 1e-4)
-        bn_std = torch.sqrt(bn_var + bn_eps)
-        return bn_mean, bn_std
+    def _pack_latents(latents: torch.Tensor) -> torch.Tensor:
+        """Pack: (B, C, H, W) → (B, H*W, C)."""
+        B, C, H, W = latents.shape
+        return latents.reshape(B, C, H * W).permute(0, 2, 1)
 
     @staticmethod
-    def _bn_normalize(x: torch.Tensor, bn_mean: torch.Tensor, bn_std: torch.Tensor) -> torch.Tensor:
-        """Apply BN normalization: y = (x - mean) / std."""
-        bn_mean = bn_mean.to(x.device, x.dtype)
-        bn_std = bn_std.to(x.device, x.dtype)
-        return (x - bn_mean) / bn_std
+    def _unpack_latents(latents: torch.Tensor, h: int, w: int) -> torch.Tensor:
+        """Unpack: (B, H*W, C) → (B, C, H, W)."""
+        B, _seq, C = latents.shape
+        return latents.permute(0, 2, 1).reshape(B, C, h, w)
 
     @staticmethod
-    def _bn_denormalize(x: torch.Tensor, bn_mean: torch.Tensor, bn_std: torch.Tensor) -> torch.Tensor:
-        """Inverse BN: x = y * std + mean."""
-        bn_mean = bn_mean.to(x.device, x.dtype)
-        bn_std = bn_std.to(x.device, x.dtype)
-        return x * bn_std + bn_mean
-
-    # ── Schedule helpers ─────────────────────────────────────────────
+    def _unpatchify_latents(latents: torch.Tensor) -> torch.Tensor:
+        """Unpatchify: (B, C*4, H//2, W//2) → (B, C, H, W)."""
+        B, C, H, W = latents.shape
+        latents = latents.reshape(B, C // 4, 2, 2, H, W)
+        latents = latents.permute(0, 1, 4, 2, 5, 3)
+        latents = latents.reshape(B, C // 4, H * 2, W * 2)
+        return latents
 
     @staticmethod
     def _compute_empirical_mu(image_seq_len: int, num_steps: int) -> float:
-        """Compute empirical mu for FLUX.2 schedule shifting.
-
-        Matches diffusers' Flux2KleinPipeline implementation.
-        """
+        """Compute empirical mu for FLUX.2 schedule shifting."""
         a1, b1 = 8.73809524e-05, 1.89833333
         a2, b2 = 0.00016927, 0.45666666
 
@@ -406,53 +407,16 @@ class Flux2DevPipeline(BasePipeline):
         return float(a * num_steps + b)
 
     @staticmethod
-    def _get_schedule(num_steps: int) -> list[float]:
-        """Get linear timestep schedule for FLUX.2.
-
-        Returns sigmas from 1.0 to 1/num_steps, plus final 0.0.
-        The actual shifting is applied by the scheduler via mu.
-        """
-        import numpy as np
-        sigmas = np.linspace(1.0, 1 / num_steps, num_steps)
-        sigmas_list = [float(s) for s in sigmas]
-        sigmas_list.append(0.0)
-        return sigmas_list
-
-    # ── Latent helpers ───────────────────────────────────────────────
-
-    @staticmethod
-    def _pack_latents(latents: torch.Tensor) -> torch.Tensor:
-        """Pack: (B, C, H, W) → (B, H/2*W/2, C*4)."""
-        b, c, h, w = latents.shape
-        latents = latents.reshape(b, c, h // 2, 2, w // 2, 2)
-        latents = latents.permute(0, 2, 4, 1, 3, 5)
-        latents = latents.reshape(b, (h // 2) * (w // 2), c * 4)
-        return latents
-
-    @staticmethod
-    def _unpack_latents(latents: torch.Tensor, h: int, w: int, c: int = 32) -> torch.Tensor:
-        """Unpack: (B, seq, C*4) → (B, C, H, W)."""
-        b, _seq, d = latents.shape
-        packed_h = h // 2
-        packed_w = w // 2
-        latents = latents.reshape(b, packed_h, packed_w, c, 2, 2)
-        latents = latents.permute(0, 3, 1, 4, 2, 5)
-        latents = latents.reshape(b, c, h, w)
-        return latents
-
-    @staticmethod
-    def _generate_image_ids_4d(
-        latent_h: int, latent_w: int, device: torch.device,
-    ) -> torch.Tensor:
-        """Generate 4D position IDs (T, H, W, L) with int64 dtype for FLUX.2.
-
-        IMPORTANT: Must be int64, not float. Using float causes NaN in rotary embeddings.
-        """
-        packed_h = latent_h // 2
-        packed_w = latent_w // 2
-
-        img_ids = torch.zeros(packed_h, packed_w, 4, device=device, dtype=torch.long)
-        img_ids[..., 1] = torch.arange(packed_h, device=device, dtype=torch.long)[:, None]
-        img_ids[..., 2] = torch.arange(packed_w, device=device, dtype=torch.long)[None, :]
-
-        return img_ids.reshape(1, packed_h * packed_w, 4)
+    def _get_sigmas(mu: float, num_steps: int) -> list[float]:
+        """Generate time-shifted sigma schedule matching FlowMatchEulerDiscreteScheduler."""
+        raw = np.linspace(1.0, 1.0 / num_steps, num_steps)
+        shifted = []
+        for t in raw:
+            if t <= 0:
+                shifted.append(0.0)
+            elif t >= 1:
+                shifted.append(1.0)
+            else:
+                shifted.append(math.exp(mu) / (math.exp(mu) + (1.0 / t - 1.0)))
+        shifted.append(0.0)  # final sigma
+        return shifted

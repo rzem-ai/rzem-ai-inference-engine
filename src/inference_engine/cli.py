@@ -187,3 +187,19 @@ def generate(
     click.echo(f"Image saved to {output} (seed={result['seed']})")
 
     engine.shutdown()
+
+
+@main.command()
+@click.option("--host", default="127.0.0.1", help="Bind host")
+@click.option("--port", default=8000, type=int, help="Bind port")
+@click.option("--device", default="auto", help="Device (auto, cuda, mps, cpu)")
+@click.option("--vram-limit", default=None, type=float, help="VRAM limit in GB")
+@click.option("--output-dir", default="./output", help="Directory for generated images")
+def serve(host: str, port: int, device: str, vram_limit: float | None, output_dir: str):
+    """Start the REST API server."""
+    import uvicorn
+
+    from inference_engine.api import create_app
+
+    app = create_app(device=device, vram_limit_gb=vram_limit, output_dir=output_dir)
+    uvicorn.run(app, host=host, port=port)
