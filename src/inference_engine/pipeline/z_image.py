@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     import PIL.Image
 
     from inference_engine.models.cache import ModelCache
-    from inference_engine.types import JobParams
+    from inference_engine.types import JobParams, PreviewConfig
 
 
 def _cache_key(path: str, role: str) -> str:
@@ -59,6 +59,7 @@ class ZImagePipeline(BasePipeline):
         params: JobParams,
         cache: ModelCache,
         progress_cb: Callable[[ProgressEvent], None],
+        preview_config: PreviewConfig | None = None,
     ) -> tuple[PIL.Image.Image, int]:
         import PIL.Image
         from transformers import AutoTokenizer, Qwen3Model
@@ -138,11 +139,10 @@ class ZImagePipeline(BasePipeline):
             cache.lock(k)
 
         try:
-            original_state = None
+            lora_hooks = []
             if params.loras:
                 lora_specs = [(lp.model_file, lp.strength) for lp in params.loras]
-                original_state = LoraApplicator.snapshot_weights(transformer)
-                LoraApplicator.load_and_apply(transformer, lora_specs, TransformerType.Z_IMAGE)
+                lora_hooks = LoraApplicator.load_and_apply(transformer, lora_specs, TransformerType.Z_IMAGE)
 
             image = self._generate(
                 params=params,
@@ -155,10 +155,10 @@ class ZImagePipeline(BasePipeline):
                 seed=seed,
                 generator=generator,
                 progress_cb=progress_cb,
+                preview_config=preview_config,
             )
 
-            if original_state is not None:
-                LoraApplicator.unapply(transformer, original_state)
+            LoraApplicator.remove_hooks(lora_hooks)
         finally:
             for k in keys:
                 cache.unlock(k)
@@ -178,6 +178,7 @@ class ZImagePipeline(BasePipeline):
         seed: int,
         generator: torch.Generator,
         progress_cb: Callable[[ProgressEvent], None],
+        preview_config: PreviewConfig | None = None,
     ) -> PIL.Image.Image:
         import PIL.Image
 
@@ -217,6 +218,11 @@ class ZImagePipeline(BasePipeline):
 
         mu = self._calculate_shift(img_seq_len)
         sigmas = self._get_sigmas(mu, num_steps)
+
+        # Preview settings
+        want_previews = preview_config is not None and preview_config.enabled
+        preview_interval = preview_config.interval if preview_config else 5
+        preview_max_size = preview_config.max_size if preview_config else 256
 
         # ── 4. Denoising loop (Z-Image Euler) ────────────────────────
         with torch.no_grad():
@@ -268,10 +274,20 @@ class ZImagePipeline(BasePipeline):
                 latents = latents + (sigma_prev - sigma_curr) * noise_pred
                 latents = latents.to(dtype=latents_dtype)
 
+                # Build progress event, optionally with preview
+                step = step_idx + 1
+                preview_image = None
+                if want_previews and step % preview_interval == 0 and step < num_steps:
+                    try:
+                        preview_image = self._generate_preview(latents, vae, preview_max_size)
+                    except Exception:
+                        logger.opt(exception=True).debug("Preview generation failed")
+
                 progress_cb(ProgressEvent(
                     job_id="",
-                    step=step_idx + 1,
+                    step=step,
                     total_steps=num_steps,
+                    preview_image=preview_image,
                 ))
 
         # ── 5. VAE decode ────────────────────────────────────────────

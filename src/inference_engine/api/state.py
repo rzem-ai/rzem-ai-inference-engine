@@ -101,10 +101,15 @@ class JobStateStore:
             if job:
                 job.step = event.step
                 job.total_steps = event.total_steps
+        data: dict = {"step": event.step, "total_steps": event.total_steps}
+        if event.preview_image is not None:
+            preview_uri = self._encode_preview(event.preview_image)
+            if preview_uri:
+                data["preview"] = preview_uri
         self._broadcast({
             "event": "job_progress",
             "job_id": event.job_id,
-            "data": {"step": event.step, "total_steps": event.total_steps},
+            "data": data,
         })
 
     def _on_completed(self, event: CompletedEvent) -> None:
@@ -153,6 +158,21 @@ class JobStateStore:
         })
 
     # ── Internal ────────────────────────────────────────────────
+
+    @staticmethod
+    def _encode_preview(image, quality: int = 75) -> str | None:
+        """Encode a PIL Image as a base64 JPEG data URI."""
+        import base64
+        import io
+
+        try:
+            buf = io.BytesIO()
+            image.save(buf, format="JPEG", quality=quality)
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            return f"data:image/jpeg;base64,{b64}"
+        except Exception:
+            logger.opt(exception=True).debug("Failed to encode preview image")
+            return None
 
     def _broadcast(self, message: dict) -> None:
         """Schedule an async broadcast from the sync callback thread."""

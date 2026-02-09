@@ -16,7 +16,7 @@ from inference_engine.pipeline.qwen_image import QwenImagePipeline
 from inference_engine.pipeline.z_image import ZImagePipeline
 from inference_engine.queue.manager import JobQueue
 from inference_engine.queue.processor import JobProcessor
-from inference_engine.types import EventType, JobParams, TransformerType
+from inference_engine.types import EventType, JobParams, PreviewConfig, TransformerType
 
 
 class InferenceEngine:
@@ -39,6 +39,7 @@ class InferenceEngine:
         self,
         device: str = "auto",
         vram_limit_gb: float | None = None,
+        preview_config: PreviewConfig | None = None,
     ) -> None:
         import torch
 
@@ -76,6 +77,7 @@ class InferenceEngine:
             cache=self._cache,
             pipelines=self._pipelines,
             emit=self._emit,
+            preview_config=preview_config,
         )
         self._thread = threading.Thread(
             target=self._processor.run,

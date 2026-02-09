@@ -10,6 +10,7 @@ from inference_engine.types import JobStatus
 class ProgressInfo(BaseModel):
     step: int
     total_steps: int
+    preview: str | None = None
 
 
 class ResultInfo(BaseModel):

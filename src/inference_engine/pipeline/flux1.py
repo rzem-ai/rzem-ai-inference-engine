@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     import PIL.Image
 
     from inference_engine.models.cache import ModelCache
-    from inference_engine.types import JobParams
+    from inference_engine.types import JobParams, PreviewConfig
 
 
 def _cache_key(path: str, role: str) -> str:
@@ -69,6 +69,7 @@ class Flux1DevPipeline(BasePipeline):
         params: JobParams,
         cache: ModelCache,
         progress_cb: Callable[[ProgressEvent], None],
+        preview_config: PreviewConfig | None = None,
     ) -> tuple[PIL.Image.Image, int]:
         import PIL.Image
         from diffusers import AutoencoderKL, FluxTransformer2DModel
@@ -156,6 +157,28 @@ class Flux1DevPipeline(BasePipeline):
         )
         cache.lock(_cache_key(params.transformer_model, "transformer"))
 
+        # Pre-load VAE for previews if enabled (VAE is ~200MB, fits alongside transformer)
+        preview_vae = None
+        want_previews = preview_config is not None and preview_config.enabled
+        if want_previews:
+            def _load_vae():
+                path = ModelLoader.resolve_path(params.vae_model)
+                if path.is_file():
+                    config = ModelLoader.resolve_config(params.vae_config, "vae")
+                    if config:
+                        return AutoencoderKL.from_single_file(str(path), config=config, torch_dtype=dtype)
+                    return AutoencoderKL.from_single_file(str(path), torch_dtype=dtype)
+                sub = path / "vae"
+                if sub.exists():
+                    path = sub
+                return AutoencoderKL.from_pretrained(str(path), torch_dtype=dtype)
+
+            preview_vae = cache.get_or_load(
+                _cache_key(params.vae_model, "vae"),
+                _load_vae,
+            )
+            cache.lock(_cache_key(params.vae_model, "vae"))
+
         try:
             lora_hooks = []
             if params.loras:
@@ -171,15 +194,20 @@ class Flux1DevPipeline(BasePipeline):
                 dtype=dtype,
                 generator=generator,
                 progress_cb=progress_cb,
+                preview_vae=preview_vae,
+                preview_config=preview_config,
             )
 
             LoraApplicator.remove_hooks(lora_hooks)
         finally:
             cache.unlock(_cache_key(params.transformer_model, "transformer"))
+            if want_previews:
+                cache.unlock(_cache_key(params.vae_model, "vae"))
 
         del prompt_embeds, pooled_prompt_embeds
 
         # ── Stage 3: VAE decode ───────────────────────────────────────
+        # If VAE was pre-loaded for previews, cache.get_or_load is a cache hit.
 
         def _load_vae():
             path = ModelLoader.resolve_path(params.vae_model)
@@ -219,6 +247,8 @@ class Flux1DevPipeline(BasePipeline):
         dtype: torch.dtype,
         generator: torch.Generator,
         progress_cb: Callable[[ProgressEvent], None],
+        preview_vae=None,
+        preview_config: PreviewConfig | None = None,
     ) -> torch.Tensor:
         """Run the rectified flow Euler denoising loop. Returns unpacked latents."""
 
@@ -251,6 +281,11 @@ class Flux1DevPipeline(BasePipeline):
         guidance = torch.tensor([params.cfg_scale], device=device, dtype=dtype)
         guidance = guidance.expand(latents.shape[0])
 
+        # Preview settings
+        want_previews = preview_vae is not None and preview_config is not None and preview_config.enabled
+        preview_interval = preview_config.interval if preview_config else 5
+        preview_max_size = preview_config.max_size if preview_config else 256
+
         # Denoising loop
         with torch.no_grad():
             for i in range(num_steps):
@@ -272,8 +307,19 @@ class Flux1DevPipeline(BasePipeline):
                 dt = t_next - t_curr
                 latents = latents + dt * noise_pred
 
+                # Build progress event, optionally with preview
+                step = i + 1
+                preview_image = None
+                if want_previews and step % preview_interval == 0 and step < num_steps:
+                    try:
+                        spatial_latents = self._unpack_latents(latents, latent_h, latent_w)
+                        preview_image = self._generate_preview(spatial_latents, preview_vae, preview_max_size)
+                    except Exception:
+                        logger.opt(exception=True).debug("Preview generation failed")
+
                 progress_cb(ProgressEvent(
-                    job_id="", step=i + 1, total_steps=num_steps,
+                    job_id="", step=step, total_steps=num_steps,
+                    preview_image=preview_image,
                 ))
 
         # Unpack

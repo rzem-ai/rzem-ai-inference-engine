@@ -39,6 +39,19 @@ class JobStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+@dataclass
+class PreviewConfig:
+    """Configuration for in-progress preview image generation.
+
+    When enabled, pipelines decode intermediate latents at the given
+    step interval and attach a small PIL Image to ProgressEvent.
+    """
+
+    enabled: bool = False
+    interval: int = 5  # generate preview every N steps
+    max_size: int = 256  # max dimension (width or height) for preview
+
+
 class LoraFormat(str, Enum):
     KOHYA = "kohya"
     DIFFUSERS = "diffusers"
@@ -133,7 +146,7 @@ class ProgressEvent:
     step: int
     total_steps: int
     timestamp: float = field(default_factory=time.time)
-    preview_latents: torch.Tensor | None = None
+    preview_image: PIL.Image.Image | None = None
 
 
 @dataclass

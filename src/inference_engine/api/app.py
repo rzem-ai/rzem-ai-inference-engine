@@ -12,12 +12,14 @@ from loguru import logger
 from inference_engine.api.routes import router
 from inference_engine.api.state import JobStateStore
 from inference_engine.api.ws import ConnectionManager
+from inference_engine.types import PreviewConfig
 
 
 def create_app(
     device: str = "auto",
     vram_limit_gb: float | None = None,
     output_dir: str = "./output",
+    preview_config: PreviewConfig | None = None,
 ) -> FastAPI:
     """Create the FastAPI application with engine lifecycle management."""
 
@@ -29,7 +31,7 @@ def create_app(
         from inference_engine.engine import InferenceEngine
 
         logger.info(f"Starting inference engine (device={device})")
-        engine = InferenceEngine(device=device, vram_limit_gb=vram_limit_gb)
+        engine = InferenceEngine(device=device, vram_limit_gb=vram_limit_gb, preview_config=preview_config)
 
         ws_manager = ConnectionManager()
         loop = asyncio.get_running_loop()

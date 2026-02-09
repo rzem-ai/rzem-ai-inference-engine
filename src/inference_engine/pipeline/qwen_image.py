@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     import PIL.Image
 
     from inference_engine.models.cache import ModelCache
-    from inference_engine.types import JobParams
+    from inference_engine.types import JobParams, PreviewConfig
 
 
 def _cache_key(path: str, role: str) -> str:
@@ -66,6 +66,7 @@ class QwenImagePipeline(BasePipeline):
         params: JobParams,
         cache: ModelCache,
         progress_cb: Callable[[ProgressEvent], None],
+        preview_config: PreviewConfig | None = None,
     ) -> tuple[PIL.Image.Image, int]:
         import PIL.Image
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -142,11 +143,10 @@ class QwenImagePipeline(BasePipeline):
             cache.lock(k)
 
         try:
-            original_state = None
+            lora_hooks = []
             if params.loras:
                 lora_specs = [(lp.model_file, lp.strength) for lp in params.loras]
-                original_state = LoraApplicator.snapshot_weights(transformer)
-                LoraApplicator.load_and_apply(transformer, lora_specs, TransformerType.QWEN_IMAGE)
+                lora_hooks = LoraApplicator.load_and_apply(transformer, lora_specs, TransformerType.QWEN_IMAGE)
 
             image = self._generate(
                 params=params,
@@ -159,10 +159,10 @@ class QwenImagePipeline(BasePipeline):
                 seed=seed,
                 generator=generator,
                 progress_cb=progress_cb,
+                preview_config=preview_config,
             )
 
-            if original_state is not None:
-                LoraApplicator.unapply(transformer, original_state)
+            LoraApplicator.remove_hooks(lora_hooks)
         finally:
             for k in keys:
                 cache.unlock(k)
@@ -182,6 +182,7 @@ class QwenImagePipeline(BasePipeline):
         seed: int,
         generator: torch.Generator,
         progress_cb: Callable[[ProgressEvent], None],
+        preview_config: PreviewConfig | None = None,
     ) -> PIL.Image.Image:
         import PIL.Image
 
@@ -232,6 +233,11 @@ class QwenImagePipeline(BasePipeline):
         # Add batch dim to prompt_embeds for transformer: [seq, dim] → [1, seq, dim]
         prompt_embeds_batched = prompt_embeds.unsqueeze(0)
 
+        # Preview settings
+        want_previews = preview_config is not None and preview_config.enabled
+        preview_interval = preview_config.interval if preview_config else 5
+        preview_max_size = preview_config.max_size if preview_config else 256
+
         # ── 6. Denoising with true CFG ───────────────────────────────
         with torch.no_grad():
             for i in range(num_steps):
@@ -273,10 +279,21 @@ class QwenImagePipeline(BasePipeline):
                 dt = sigma_prev - sigma_curr
                 latents = latents + dt * noise_pred
 
+                # Build progress event, optionally with preview
+                step = i + 1
+                preview_image = None
+                if want_previews and step % preview_interval == 0 and step < num_steps:
+                    try:
+                        spatial_latents = self._unpack_latents(latents, latent_h, latent_w)
+                        preview_image = self._generate_preview(spatial_latents, vae, preview_max_size)
+                    except Exception:
+                        logger.opt(exception=True).debug("Preview generation failed")
+
                 progress_cb(ProgressEvent(
                     job_id="",
-                    step=i + 1,
+                    step=step,
                     total_steps=num_steps,
+                    preview_image=preview_image,
                 ))
 
         # ── 7. Unpack and decode ─────────────────────────────────────

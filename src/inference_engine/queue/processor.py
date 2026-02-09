@@ -11,6 +11,7 @@ from inference_engine.types import (
     CompletedEvent,
     EventType,
     FailedEvent,
+    PreviewConfig,
     ProgressEvent,
     StartedEvent,
 )
@@ -31,11 +32,13 @@ class JobProcessor:
         cache: ModelCache,
         pipelines: dict[TransformerType, BasePipeline],
         emit: Callable,
+        preview_config: PreviewConfig | None = None,
     ) -> None:
         self._queue = queue
         self._cache = cache
         self._pipelines = pipelines
         self._emit = emit
+        self._preview_config = preview_config
         self._running = True
 
     def run(self) -> None:
@@ -68,7 +71,7 @@ class JobProcessor:
                     self._emit(EventType.JOB_PROGRESS, event)
 
                 # Run the pipeline
-                image, seed = pipeline.run(params, self._cache, progress_cb)
+                image, seed = pipeline.run(params, self._cache, progress_cb, self._preview_config)
 
                 self._queue.mark_completed(job_id)
                 self._emit(

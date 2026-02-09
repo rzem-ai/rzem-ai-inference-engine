@@ -195,11 +195,18 @@ def generate(
 @click.option("--device", default="auto", help="Device (auto, cuda, mps, cpu)")
 @click.option("--vram-limit", default=None, type=float, help="VRAM limit in GB")
 @click.option("--output-dir", default="./output", help="Directory for generated images")
-def serve(host: str, port: int, device: str, vram_limit: float | None, output_dir: str):
+@click.option("--preview-interval", default=None, type=int, help="Generate preview every N steps (enables previews)")
+@click.option("--preview-size", default=256, type=int, help="Max preview dimension in pixels")
+def serve(host: str, port: int, device: str, vram_limit: float | None, output_dir: str, preview_interval: int | None, preview_size: int):
     """Start the REST API server."""
     import uvicorn
 
     from inference_engine.api import create_app
+    from inference_engine.types import PreviewConfig
 
-    app = create_app(device=device, vram_limit_gb=vram_limit, output_dir=output_dir)
+    preview_config = None
+    if preview_interval is not None:
+        preview_config = PreviewConfig(enabled=True, interval=preview_interval, max_size=preview_size)
+
+    app = create_app(device=device, vram_limit_gb=vram_limit, output_dir=output_dir, preview_config=preview_config)
     uvicorn.run(app, host=host, port=port)
