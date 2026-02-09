@@ -1,0 +1,29 @@
+[project]
+name = "inference-engine"
+version = "0.1.0"
+description = "Text-to-image inference engine with job queue and VRAM management"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0",
+    "diffusers>=0.32",
+    "transformers>=4.40",
+    "accelerate",
+    "safetensors",
+    "huggingface-hub",
+    "pydantic>=2.0",
+    "Pillow",
+    "click",
+    "einops",
+    "sentencepiece",
+    "loguru",
+]
+
+[project.scripts]
+inference-engine = "inference_engine.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/inference_engine"]

@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environment
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Generated outputs
+*.png
+*.jpg
+*.jpeg
+
+# OS
+.DS_Store
+
+# Claude Code
+.claude/
