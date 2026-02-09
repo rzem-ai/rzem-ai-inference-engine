@@ -23,6 +23,8 @@ bash scripts/test_flux1.sh        # FLUX.1 Dev (all from BFL repo)
 bash scripts/test_flux1_alt.sh    # FLUX.1 Dev (separate repos)
 bash scripts/test_flux1_gguf.sh   # FLUX.1 Dev (GGUF Q8_0 transformer)
 bash scripts/test_zimage.sh       # Z-Image Turbo
+bash scripts/test_flux1_lora.sh   # FLUX.1 Dev + LoRA (bf16)
+bash scripts/test_flux1_gguf_lora.sh  # FLUX.1 Dev + LoRA (GGUF Q8_0)
 ```
 
 ## Architecture
@@ -38,7 +40,7 @@ bash scripts/test_zimage.sh       # Z-Image Turbo
 - `src/inference_engine/models/cache.py` — Two-tier VRAM/RAM cache, smallest-first eviction
 - `src/inference_engine/models/loader.py` — Path resolution (local, HF repo, HF repo+file)
 - `src/inference_engine/models/memory.py` — VRAM estimation and device detection
-- `src/inference_engine/lora/applicator.py` — LoRA format detection and weight patching
+- `src/inference_engine/lora/applicator.py` — LoRA format detection and forward-hook application
 - `src/inference_engine/queue/` — Job queue (`manager.py`) and processor (`processor.py`)
 - `src/inference_engine/api/` — REST API (FastAPI)
   - `app.py` — App factory with lifespan, WebSocket endpoint
@@ -68,7 +70,7 @@ Text encoders and transformer don't fit in VRAM simultaneously. Pipeline stages:
 - **Time schedule**: Linear interpolation mu formula: `mu = m * seq_len + b` where `m = (1.15 - 0.5) / (4096 - 256)`. Applied via exponential time shift: `exp(mu) / (exp(mu) + (1/t - 1)^sigma)`.
 
 ### LoRA system
-Format detection (Kohya, Diffusers, XLabs, AIToolkit, OneTrainer) based on key patterns. Apply as weight deltas: `weight += strength * (alpha/rank) * (up @ down)`. Snapshot/unapply for model reuse between jobs.
+Format detection (Kohya, Diffusers, XLabs, AIToolkit, OneTrainer) based on key patterns. Forward-hook approach: `output += F.linear(F.linear(input, down), up) * (strength * alpha/rank)`. No weight modification, works with quantized (GGUF) models. Hooks are removed after inference. Kohya/XLabs keys use BFL naming and require conversion via `_flux1_bfl_to_diffusers()` (fused QKV/linear1 splitting).
 
 ### Event system
 Thread-safe callback registration on `InferenceEngine`. Events: JOB_QUEUED, JOB_STARTED, JOB_PROGRESS, JOB_COMPLETED, JOB_FAILED, JOB_CANCELLED, MODEL_LOADING, MODEL_LOADED, MODEL_UNLOADED.
@@ -97,4 +99,4 @@ torch, diffusers (>=0.32), transformers, accelerate, safetensors, huggingface-hu
 - Z-Image Turbo: Working (verified with Tongyi-MAI/Z-Image-Turbo + Qwen3-4B, seed 42)
 - FLUX.2 Dev: Untested
 - Qwen-Image: Untested
-- LoRA: Untested
+- LoRA: Working (verified Kohya format with FLUX.1 Dev bf16 + GGUF Q8_0, Moebius style LoRA)

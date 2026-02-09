@@ -157,11 +157,10 @@ class Flux1DevPipeline(BasePipeline):
         cache.lock(_cache_key(params.transformer_model, "transformer"))
 
         try:
-            original_state = None
+            lora_hooks = []
             if params.loras:
                 lora_specs = [(lp.model_file, lp.strength) for lp in params.loras]
-                original_state = LoraApplicator.snapshot_weights(transformer)
-                LoraApplicator.load_and_apply(transformer, lora_specs, TransformerType.FLUX1_DEV)
+                lora_hooks = LoraApplicator.load_and_apply(transformer, lora_specs, TransformerType.FLUX1_DEV)
 
             latents = self._denoise(
                 params=params,
@@ -174,8 +173,7 @@ class Flux1DevPipeline(BasePipeline):
                 progress_cb=progress_cb,
             )
 
-            if original_state is not None:
-                LoraApplicator.unapply(transformer, original_state)
+            LoraApplicator.remove_hooks(lora_hooks)
         finally:
             cache.unlock(_cache_key(params.transformer_model, "transformer"))
 
