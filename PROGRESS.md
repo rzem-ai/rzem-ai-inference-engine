@@ -14,7 +14,17 @@ Last updated: 2026-02-09
 - Job queue: `queue/manager.py` — thread-safe FIFO, cancel support
 - Job processor: `queue/processor.py` — background thread, sequential execution
 - Engine: `engine.py` — public API, event system (on/off/emit), submit/cancel/shutdown
-- CLI: `cli.py` — Click-based `inference-engine generate` with all parameters
+- CLI: `cli.py` — Click-based `inference-engine generate` and `inference-engine serve`
+- REST API: `api/` — FastAPI with WebSocket event broadcasting
+  - `POST /jobs` — submit generation jobs
+  - `GET /jobs`, `GET /jobs/{id}`, `DELETE /jobs/{id}` — job CRUD
+  - `GET /jobs/{id}/image` — download generated PNG
+  - `GET /models` — list locally cached HF models (summary)
+  - `GET /models/all` — list cached models with full revision/file tree
+  - `GET /health` — health check with device and queue stats
+  - `WS /ws` — real-time job event broadcasting
+  - `JobStateStore` bridges engine thread callbacks to async WebSocket via `call_soon_threadsafe`
+  - `scripts/server.sh` — start/stop/restart/status with PID management
 - Docs: `CLAUDE.md`, `README.md`, `ARCHITECTURE.md`
 
 ### Pipelines
@@ -115,6 +125,7 @@ scripts/test_flux2.sh          # FLUX.2 Dev (untested)
 scripts/test_qwen_image.sh     # Qwen-Image (untested)
 scripts/test_with_lora.sh      # LoRA application (untested)
 scripts/test_all.sh            # Run all tests
+scripts/server.sh              # REST API server management (start/stop/restart/status)
 ```
 
 ## Installed Versions (Linux, NVIDIA RTX 5090)

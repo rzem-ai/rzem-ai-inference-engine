@@ -10,9 +10,13 @@ Text-to-image inference engine with job queue, event system, and automatic VRAM 
 # Install
 pip install -e .
 
-# CLI
+# CLI — generate
 inference-engine generate --help
 inference-engine generate --prompt "..." --transformer-model <path> --transformer-type flux1_dev --vae-model <path> ...
+
+# CLI — REST API server
+inference-engine serve --host 127.0.0.1 --port 8000 --device auto --output-dir ./output
+bash scripts/server.sh start       # Background with PID management
 
 # Test scripts
 bash scripts/test_flux1.sh        # FLUX.1 Dev (all from BFL repo)
@@ -36,7 +40,13 @@ bash scripts/test_zimage.sh       # Z-Image Turbo
 - `src/inference_engine/models/memory.py` — VRAM estimation and device detection
 - `src/inference_engine/lora/applicator.py` — LoRA format detection and weight patching
 - `src/inference_engine/queue/` — Job queue (`manager.py`) and processor (`processor.py`)
-- `src/inference_engine/cli.py` — Click CLI
+- `src/inference_engine/api/` — REST API (FastAPI)
+  - `app.py` — App factory with lifespan, WebSocket endpoint
+  - `routes.py` — HTTP routes (jobs CRUD, models listing, health)
+  - `models.py` — Pydantic response models
+  - `state.py` — `JobStateStore` (engine event → async WebSocket bridge)
+  - `ws.py` — `ConnectionManager` (WebSocket broadcast)
+- `src/inference_engine/cli.py` — Click CLI (`generate` + `serve` commands)
 
 ## Key Patterns
 
@@ -63,6 +73,9 @@ Format detection (Kohya, Diffusers, XLabs, AIToolkit, OneTrainer) based on key p
 ### Event system
 Thread-safe callback registration on `InferenceEngine`. Events: JOB_QUEUED, JOB_STARTED, JOB_PROGRESS, JOB_COMPLETED, JOB_FAILED, JOB_CANCELLED, MODEL_LOADING, MODEL_LOADED, MODEL_UNLOADED.
 
+### REST API
+FastAPI app factory in `api/app.py` → `create_app(device, vram_limit_gb, output_dir)`. WebSocket at `/ws` broadcasts all job events as JSON. Threading bridge: engine callbacks fire on processor thread, `JobStateStore` uses `loop.call_soon_threadsafe` to schedule async broadcasts. Images saved as `{job_id}.png` in output_dir, served via `GET /jobs/{id}/image`. `GET /models` and `GET /models/all` use `huggingface_hub.scan_cache_dir()` to list locally cached models.
+
 ## Common Pitfalls
 
 - **Timestep scaling**: Never pass `sigma * 1000` to FluxTransformer2DModel. It expects [0, 1].
@@ -76,7 +89,7 @@ Thread-safe callback registration on `InferenceEngine`. Events: JOB_QUEUED, JOB_
 
 ## Dependencies
 
-torch, diffusers (>=0.36), transformers, accelerate, safetensors, huggingface-hub, pydantic, Pillow, click, einops, sentencepiece, loguru. Optional: gguf (for GGUF quantized models). Build system: hatchling.
+torch, diffusers (>=0.32), transformers, accelerate, safetensors, huggingface-hub, pydantic, Pillow, click, einops, sentencepiece, loguru, fastapi (>=0.110), uvicorn[standard] (>=0.27), python-multipart. Optional: gguf (for GGUF quantized models). Build system: hatchling.
 
 ## Testing Status
 

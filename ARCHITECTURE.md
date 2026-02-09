@@ -15,7 +15,14 @@ src/inference_engine/
 ├── __main__.py              # python -m inference_engine
 ├── engine.py                # InferenceEngine (main entry point)
 ├── types.py                 # All shared types
-├── cli.py                   # Click CLI
+├── cli.py                   # Click CLI (generate + serve commands)
+├── api/
+│   ├── __init__.py          # Exports create_app
+│   ├── app.py               # FastAPI factory, lifespan, WebSocket endpoint
+│   ├── routes.py            # HTTP routes (jobs, models, health)
+│   ├── models.py            # Pydantic response models
+│   ├── state.py             # JobStateStore (event → WebSocket bridge)
+│   └── ws.py                # ConnectionManager (WebSocket broadcast)
 ├── pipeline/
 │   ├── base.py              # BasePipeline ABC
 │   ├── flux1.py             # FLUX.1 Dev
@@ -36,26 +43,37 @@ src/inference_engine/
 ## Component Relationships
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        InferenceEngine                          │
-│                                                                 │
-│  ┌──────────┐  ┌──────────────┐  ┌────────────────────────────┐ │
-│  │ JobQueue  │──│ JobProcessor │──│ Pipeline (flux1/z_image/…) │ │
-│  │          │  │  (bg thread) │  │                            │ │
-│  └──────────┘  └──────────────┘  └─────────────┬──────────────┘ │
-│                                                │                │
-│                                   ┌────────────▼──────────────┐ │
-│                                   │       ModelCache          │ │
-│                                   │  ┌──────┐  ┌───────────┐ │ │
-│                                   │  │ VRAM │◄─│    RAM     │ │ │
-│                                   │  │ (hot)│  │  (warm)    │ │ │
-│                                   │  └──────┘  └───────────┘ │ │
-│                                   └───────────────────────────┘ │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Event System: on()/off()/_emit() with thread-safe cbs  │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                             REST API (FastAPI)                             │
+│                                                                           │
+│  POST /jobs  GET /jobs  DELETE /jobs/{id}  GET /jobs/{id}/image           │
+│  GET /models  GET /models/all  GET /health  WS /ws                       │
+│                                                                           │
+│  ┌─────────────────┐  ┌────────────────────────────────────┐              │
+│  │ JobStateStore    │  │ ConnectionManager (WebSocket)       │              │
+│  │ (event→state)   │──│ broadcasts JSON to all clients      │              │
+│  └────────┬────────┘  └────────────────────────────────────┘              │
+│           │ loop.call_soon_threadsafe                                      │
+├───────────▼───────────────────────────────────────────────────────────────┤
+│                        InferenceEngine                                     │
+│                                                                           │
+│  ┌──────────┐  ┌──────────────┐  ┌────────────────────────────┐           │
+│  │ JobQueue  │──│ JobProcessor │──│ Pipeline (flux1/z_image/…) │           │
+│  │          │  │  (bg thread) │  │                            │           │
+│  └──────────┘  └──────────────┘  └─────────────┬──────────────┘           │
+│                                                │                          │
+│                                   ┌────────────▼──────────────┐           │
+│                                   │       ModelCache          │           │
+│                                   │  ┌──────┐  ┌───────────┐ │           │
+│                                   │  │ VRAM │◄─│    RAM     │ │           │
+│                                   │  │ (hot)│  │  (warm)    │ │           │
+│                                   │  └──────┘  └───────────┘ │           │
+│                                   └───────────────────────────┘           │
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────┐             │
+│  │  Event System: on()/off()/_emit() with thread-safe cbs  │             │
+│  └──────────────────────────────────────────────────────────┘             │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Data Flow
@@ -271,6 +289,37 @@ engine.on(EventType.JOB_PROGRESS, callback)
 ```
 
 Events are emitted synchronously on the processor thread. Listeners that do heavy work should offload to their own threads.
+
+## REST API (`api/`)
+
+### Application Factory
+
+`create_app(device, vram_limit_gb, output_dir)` returns a FastAPI app. The lifespan context manager creates the `InferenceEngine`, `ConnectionManager`, and `JobStateStore`, attaching them to `app.state`.
+
+### Routes (`routes.py`)
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/jobs` | Submit a generation job (body: `JobParams`) |
+| `GET` | `/jobs` | List all tracked jobs |
+| `GET` | `/jobs/{id}` | Get job details |
+| `DELETE` | `/jobs/{id}` | Cancel a queued job |
+| `GET` | `/jobs/{id}/image` | Download the generated PNG |
+| `GET` | `/models` | List locally cached HF models (summary) |
+| `GET` | `/models/all` | List cached models with full file tree |
+| `GET` | `/health` | Health check with device and queue stats |
+
+### WebSocket (`/ws`)
+
+All job lifecycle events are broadcast as JSON to connected WebSocket clients. The `ConnectionManager` tracks active connections and handles dead socket cleanup.
+
+### Threading Bridge (`state.py`)
+
+Engine callbacks fire on the processor thread. `JobStateStore` bridges to the async event loop via `loop.call_soon_threadsafe(asyncio.ensure_future, ws.broadcast(msg))`. This keeps the processor thread non-blocking while delivering real-time updates over WebSocket.
+
+### CLI
+
+`inference-engine serve --host --port --device --vram-limit --output-dir` starts a uvicorn server. The `scripts/server.sh` helper supports start/stop/restart/status with PID file management.
 
 ## Queue and Processing
 
