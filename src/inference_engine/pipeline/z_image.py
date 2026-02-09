@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Callable
 import torch
 from loguru import logger
 
-from inference_engine.lora.applicator import LoraApplicator
+from inference_engine.pipeline.lora_applicator import LoraApplicator
 from inference_engine.models.loader import ModelLoader
 from inference_engine.pipeline.base import BasePipeline
 from inference_engine.types import ModelSpec, ProgressEvent, TransformerType

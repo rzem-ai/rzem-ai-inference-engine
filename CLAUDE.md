@@ -40,7 +40,7 @@ bash scripts/test_flux1_gguf_lora.sh  # FLUX.1 Dev + LoRA (GGUF Q8_0)
 - `src/inference_engine/models/cache.py` — Two-tier VRAM/RAM cache, smallest-first eviction
 - `src/inference_engine/models/loader.py` — Path resolution (local, HF repo, HF repo+file)
 - `src/inference_engine/models/memory.py` — VRAM estimation and device detection
-- `src/inference_engine/lora/applicator.py` — LoRA format detection and forward-hook application
+  - `lora_applicator.py` — LoRA format detection and forward-hook application
 - `src/inference_engine/queue/` — Job queue (`manager.py`) and processor (`processor.py`)
 - `src/inference_engine/api/` — REST API (FastAPI)
   - `app.py` — App factory with lifespan, WebSocket endpoint
