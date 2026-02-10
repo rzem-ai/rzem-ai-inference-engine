@@ -1,4 +1,4 @@
-# Inference Engine
+# RZEM AI Inference Engine
 
 A Python text-to-image inference engine with job queue, event callbacks, and automatic VRAM management. Supports multiple model families with a unified API that hides architectural differences while exposing full parameter control.
 
@@ -26,7 +26,7 @@ Requires Python 3.10+ and PyTorch 2.0+. GPU with 24+ GB VRAM recommended.
 ### Python API
 
 ```python
-from inference_engine import InferenceEngine, JobParams, EventType, TransformerType
+from rzem_ai_inference_engine import InferenceEngine, JobParams, EventType, TransformerType
 
 engine = InferenceEngine()
 
@@ -59,7 +59,7 @@ job_id = engine.submit(JobParams(
 
 ```bash
 # FLUX.1 Dev — all models from Black Forest Labs
-inference-engine generate \
+rzem-ai-inference-engine generate \
     --prompt "a cat sitting on a windowsill, golden hour lighting" \
     --transformer-model black-forest-labs/FLUX.1-dev \
     --transformer-type flux1_dev \
@@ -74,7 +74,7 @@ inference-engine generate \
     --output output.png
 
 # Z-Image Turbo
-inference-engine generate \
+rzem-ai-inference-engine generate \
     --prompt "mountain landscape at sunset" \
     --transformer-model Tongyi-MAI/Z-Image-Turbo \
     --transformer-type z_image \
@@ -85,7 +85,7 @@ inference-engine generate \
     --output output.png
 
 # With LoRAs (format: path:strength)
-inference-engine generate \
+rzem-ai-inference-engine generate \
     ... \
     --lora ./models/anime.safetensors:0.8 \
     --lora ./models/detail.safetensors:0.5 \

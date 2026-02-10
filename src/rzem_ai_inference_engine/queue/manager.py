@@ -9,7 +9,7 @@ from typing import Callable
 
 from loguru import logger
 
-from inference_engine.types import (
+from rzem_ai_inference_engine.types import (
     CancelledEvent,
     EventType,
     Job,

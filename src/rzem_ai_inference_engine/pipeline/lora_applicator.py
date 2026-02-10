@@ -12,7 +12,7 @@ from loguru import logger
 from safetensors.torch import load_file
 from torch.utils.hooks import RemovableHandle
 
-from inference_engine.types import LoraFormat, TransformerType
+from rzem_ai_inference_engine.types import LoraFormat, TransformerType
 
 # ── Parsing tree for OneTrainer underscore→dot conversion ─────────────
 # Defines valid diffusers FluxTransformer2DModel parameter paths.
@@ -181,7 +181,7 @@ class LoraApplicator:
         """Load a LoRA state dict from a file."""
         p = Path(path)
         if not p.exists():
-            from inference_engine.models.loader import ModelLoader
+            from rzem_ai_inference_engine.models.loader import ModelLoader
             p = ModelLoader.resolve_single_file(path)
 
         if p.suffix == ".safetensors":

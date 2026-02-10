@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from inference_engine.api.models import (
+from rzem_ai_inference_engine.api.models import (
     CachedFileResponse,
     CachedModelDetailResponse,
     CachedModelResponse,
@@ -14,7 +14,7 @@ from inference_engine.api.models import (
     JobResponse,
     build_job_response,
 )
-from inference_engine.types import JobParams, JobStatus
+from rzem_ai_inference_engine.types import JobParams, JobStatus
 
 router = APIRouter()
 

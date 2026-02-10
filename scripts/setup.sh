@@ -19,13 +19,13 @@ fi
 source "$PROJECT_DIR/.venv/bin/activate"
 
 # Install in editable mode
-echo "Installing inference-engine..."
+echo "Installing rzem-ai-inference-engine..."
 pip install -e "$PROJECT_DIR" --quiet
 
 # Verify
 echo ""
 echo "=== Verification ==="
-inference-engine --help
+rzem-ai-inference-engine --help
 echo ""
 echo "Setup complete. Activate the environment with:"
 echo "  source $PROJECT_DIR/.venv/bin/activate"

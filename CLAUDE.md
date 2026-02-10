@@ -1,4 +1,4 @@
-# CLAUDE.md — Inference Engine
+# CLAUDE.md — RZEM AI Inference Engine
 
 ## Project Overview
 
@@ -11,11 +11,11 @@ Text-to-image inference engine with job queue, event system, and automatic VRAM 
 pip install -e .
 
 # CLI — generate
-inference-engine generate --help
-inference-engine generate --prompt "..." --transformer-model <path> --transformer-type flux1_dev --vae-model <path> ...
+rzem-ai-inference-engine generate --help
+rzem-ai-inference-engine generate --prompt "..." --transformer-model <path> --transformer-type flux1_dev --vae-model <path> ...
 
 # CLI — REST API server
-inference-engine serve --host 127.0.0.1 --port 8000 --device auto --output-dir ./output
+rzem-ai-inference-engine serve --host 127.0.0.1 --port 8000 --device auto --output-dir ./output
 bash scripts/server.sh start       # Background with PID management
 
 # Test scripts
@@ -29,26 +29,26 @@ bash scripts/test_flux1_gguf_lora.sh  # FLUX.1 Dev + LoRA (GGUF Q8_0)
 
 ## Architecture
 
-- `src/inference_engine/engine.py` — Main `InferenceEngine` class (public API, thread-safe)
-- `src/inference_engine/types.py` — All types: `JobParams`, `TransformerType`, events, enums
-- `src/inference_engine/pipeline/` — Pipeline implementations (one per model family)
+- `src/rzem_ai_inference_engine/engine.py` — Main `InferenceEngine` class (public API, thread-safe)
+- `src/rzem_ai_inference_engine/types.py` — All types: `JobParams`, `TransformerType`, events, enums
+- `src/rzem_ai_inference_engine/pipeline/` — Pipeline implementations (one per model family)
   - `base.py` — `BasePipeline` ABC: `validate_params`, `get_required_models`, `run`
   - `flux1.py` — FLUX.1 Dev: CLIP + T5 encoding, rectified flow Euler, guidance-distilled
   - `flux2.py` — FLUX.2 Dev: Qwen3 multi-layer encoding, 32-ch VAE, BN normalization
   - `z_image.py` — Z-Image: S3-DiT single-stream, Qwen3-4B, v-prediction with negation
   - `qwen_image.py` — Qwen-Image: 20B MMDiT, true CFG, Qwen3 encoding
-- `src/inference_engine/models/cache.py` — Two-tier VRAM/RAM cache, smallest-first eviction
-- `src/inference_engine/models/loader.py` — Path resolution (local, HF repo, HF repo+file)
-- `src/inference_engine/models/memory.py` — VRAM estimation and device detection
+- `src/rzem_ai_inference_engine/models/cache.py` — Two-tier VRAM/RAM cache, smallest-first eviction
+- `src/rzem_ai_inference_engine/models/loader.py` — Path resolution (local, HF repo, HF repo+file)
+- `src/rzem_ai_inference_engine/models/memory.py` — VRAM estimation and device detection
   - `lora_applicator.py` — LoRA format detection and forward-hook application
-- `src/inference_engine/queue/` — Job queue (`manager.py`) and processor (`processor.py`)
-- `src/inference_engine/api/` — REST API (FastAPI)
+- `src/rzem_ai_inference_engine/queue/` — Job queue (`manager.py`) and processor (`processor.py`)
+- `src/rzem_ai_inference_engine/api/` — REST API (FastAPI)
   - `app.py` — App factory with lifespan, WebSocket endpoint
   - `routes.py` — HTTP routes (jobs CRUD, models listing, health)
   - `models.py` — Pydantic response models
   - `state.py` — `JobStateStore` (engine event → async WebSocket bridge)
   - `ws.py` — `ConnectionManager` (WebSocket broadcast)
-- `src/inference_engine/cli.py` — Click CLI (`generate` + `serve` commands)
+- `src/rzem_ai_inference_engine/cli.py` — Click CLI (`generate` + `serve` commands)
 
 ## Key Patterns
 

@@ -1,11 +1,11 @@
-# Progress — Inference Engine
+# Progress — RZEM AI Inference Engine
 
 Last updated: 2026-02-09
 
 ## What's Done
 
 ### Infrastructure (all complete)
-- Package scaffold: `pyproject.toml` (hatchling), `src/inference_engine/`, `pip install -e .`
+- Package scaffold: `pyproject.toml` (hatchling), `src/rzem_ai_inference_engine/`, `pip install -e .`
 - Type system: `types.py` — `JobParams`, `TransformerType`, `LoraParams`, all event dataclasses
 - Model cache: `models/cache.py` — two-tier VRAM/RAM, smallest-first eviction, lock/unlock, `torch.cuda.empty_cache()` after eviction
 - Model loader: `models/loader.py` — local path, `org/repo` (snapshot_download), `org/repo/file.ext` (hf_hub_download)
@@ -14,7 +14,7 @@ Last updated: 2026-02-09
 - Job queue: `queue/manager.py` — thread-safe FIFO, cancel support
 - Job processor: `queue/processor.py` — background thread, sequential execution
 - Engine: `engine.py` — public API, event system (on/off/emit), submit/cancel/shutdown
-- CLI: `cli.py` — Click-based `inference-engine generate` and `inference-engine serve`
+- CLI: `cli.py` — Click-based `rzem-ai-inference-engine generate` and `rzem-ai-inference-engine serve`
 - REST API: `api/` — FastAPI with WebSocket event broadcasting
   - `POST /jobs` — submit generation jobs
   - `GET /jobs`, `GET /jobs/{id}`, `DELETE /jobs/{id}` — job CRUD
@@ -100,7 +100,7 @@ pip install -e .
 bash scripts/test_zimage.sh
 
 # FLUX.1 with VRAM limit
-VRAM_LIMIT=24 inference-engine generate \
+VRAM_LIMIT=24 rzem-ai-inference-engine generate \
     --prompt "a cat on a windowsill" \
     --transformer-model black-forest-labs/FLUX.1-dev \
     --transformer-type flux1_dev \

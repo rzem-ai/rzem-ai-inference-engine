@@ -9,10 +9,10 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from loguru import logger
 
-from inference_engine.api.routes import router
-from inference_engine.api.state import JobStateStore
-from inference_engine.api.ws import ConnectionManager
-from inference_engine.types import PreviewConfig
+from rzem_ai_inference_engine.api.routes import router
+from rzem_ai_inference_engine.api.state import JobStateStore
+from rzem_ai_inference_engine.api.ws import ConnectionManager
+from rzem_ai_inference_engine.types import PreviewConfig
 
 
 def create_app(
@@ -28,7 +28,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Import engine lazily (pulls in torch)
-        from inference_engine.engine import InferenceEngine
+        from rzem_ai_inference_engine.engine import InferenceEngine
 
         logger.info(f"Starting inference engine (device={device})")
         engine = InferenceEngine(device=device, vram_limit_gb=vram_limit_gb, preview_config=preview_config)
@@ -48,7 +48,7 @@ def create_app(
         engine.shutdown()
 
     app = FastAPI(
-        title="Inference Engine API",
+        title="RZEM AI Inference Engine API",
         version="0.1.0",
         lifespan=lifespan,
     )

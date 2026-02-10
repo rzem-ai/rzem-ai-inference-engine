@@ -8,15 +8,15 @@ from typing import Any, Callable
 
 from loguru import logger
 
-from inference_engine.models.cache import ModelCache
-from inference_engine.models.memory import detect_device
-from inference_engine.pipeline.flux1 import Flux1DevPipeline
-from inference_engine.pipeline.flux2 import Flux2DevPipeline
-from inference_engine.pipeline.qwen_image import QwenImagePipeline
-from inference_engine.pipeline.z_image import ZImagePipeline
-from inference_engine.queue.manager import JobQueue
-from inference_engine.queue.processor import JobProcessor
-from inference_engine.types import EventType, JobParams, PreviewConfig, TransformerType
+from rzem_ai_inference_engine.models.cache import ModelCache
+from rzem_ai_inference_engine.models.memory import detect_device
+from rzem_ai_inference_engine.pipeline.flux1 import Flux1DevPipeline
+from rzem_ai_inference_engine.pipeline.flux2 import Flux2DevPipeline
+from rzem_ai_inference_engine.pipeline.qwen_image import QwenImagePipeline
+from rzem_ai_inference_engine.pipeline.z_image import ZImagePipeline
+from rzem_ai_inference_engine.queue.manager import JobQueue
+from rzem_ai_inference_engine.queue.processor import JobProcessor
+from rzem_ai_inference_engine.types import EventType, JobParams, PreviewConfig, TransformerType
 
 
 class InferenceEngine:

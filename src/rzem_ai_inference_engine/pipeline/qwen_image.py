@@ -12,17 +12,17 @@ from typing import TYPE_CHECKING, Callable
 import torch
 from loguru import logger
 
-from inference_engine.pipeline.lora_applicator import LoraApplicator
-from inference_engine.models.loader import ModelLoader
-from inference_engine.pipeline.base import BasePipeline
-from inference_engine.pipeline.z_image import ZImagePipeline
-from inference_engine.types import ModelSpec, ProgressEvent, TransformerType
+from rzem_ai_inference_engine.pipeline.lora_applicator import LoraApplicator
+from rzem_ai_inference_engine.models.loader import ModelLoader
+from rzem_ai_inference_engine.pipeline.base import BasePipeline
+from rzem_ai_inference_engine.pipeline.z_image import ZImagePipeline
+from rzem_ai_inference_engine.types import ModelSpec, ProgressEvent, TransformerType
 
 if TYPE_CHECKING:
     import PIL.Image
 
-    from inference_engine.models.cache import ModelCache
-    from inference_engine.types import JobParams, PreviewConfig
+    from rzem_ai_inference_engine.models.cache import ModelCache
+    from rzem_ai_inference_engine.types import JobParams, PreviewConfig
 
 
 def _cache_key(path: str, role: str) -> str:

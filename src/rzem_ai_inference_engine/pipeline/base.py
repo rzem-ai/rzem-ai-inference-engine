@@ -11,8 +11,8 @@ import torch.nn.functional as F
 if TYPE_CHECKING:
     import PIL.Image
 
-    from inference_engine.models.cache import ModelCache
-    from inference_engine.types import JobParams, ModelSpec, PreviewConfig, ProgressEvent
+    from rzem_ai_inference_engine.models.cache import ModelCache
+    from rzem_ai_inference_engine.types import JobParams, ModelSpec, PreviewConfig, ProgressEvent
 
 
 class BasePipeline(ABC):

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from inference_engine.types import (
+from rzem_ai_inference_engine.types import (
     CancelledEvent,
     CompletedEvent,
     EventType,
@@ -22,8 +22,8 @@ from inference_engine.types import (
 )
 
 if TYPE_CHECKING:
-    from inference_engine.api.ws import ConnectionManager
-    from inference_engine.engine import InferenceEngine
+    from rzem_ai_inference_engine.api.ws import ConnectionManager
+    from rzem_ai_inference_engine.engine import InferenceEngine
 
 
 @dataclass

@@ -1,7 +1,7 @@
 """Inference engine for text-to-image generation."""
 
-from inference_engine.engine import InferenceEngine
-from inference_engine.types import (
+from rzem_ai_inference_engine.engine import InferenceEngine
+from rzem_ai_inference_engine.types import (
     CompletedEvent,
     EventType,
     FailedEvent,

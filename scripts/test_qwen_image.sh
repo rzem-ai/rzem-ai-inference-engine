@@ -20,7 +20,7 @@ echo "Repo:   $TRANSFORMER"
 echo "Output: $OUTPUT"
 echo ""
 
-inference-engine generate \
+rzem-ai-inference-engine generate \
     --prompt "a photorealistic portrait of a woman reading a book in a cozy library" \
     --transformer-model "$TRANSFORMER" \
     --transformer-type qwen_image \

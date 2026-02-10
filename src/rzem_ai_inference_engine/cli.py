@@ -9,7 +9,7 @@ import time
 import click
 from loguru import logger
 
-from inference_engine.types import EventType, TransformerType
+from rzem_ai_inference_engine.types import EventType, TransformerType
 
 
 def parse_lora(value: str) -> tuple[str, float]:
@@ -97,8 +97,8 @@ def generate(
     vram_limit: float | None,
 ):
     """Generate an image from a text prompt."""
-    from inference_engine.engine import InferenceEngine
-    from inference_engine.types import (
+    from rzem_ai_inference_engine.engine import InferenceEngine
+    from rzem_ai_inference_engine.types import (
         CompletedEvent,
         FailedEvent,
         JobParams,
@@ -201,8 +201,8 @@ def serve(host: str, port: int, device: str, vram_limit: float | None, output_di
     """Start the REST API server."""
     import uvicorn
 
-    from inference_engine.api import create_app
-    from inference_engine.types import PreviewConfig
+    from rzem_ai_inference_engine.api import create_app
+    from rzem_ai_inference_engine.types import PreviewConfig
 
     preview_config = None
     if preview_interval is not None:

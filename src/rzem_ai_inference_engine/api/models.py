@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from inference_engine.types import JobStatus
+from rzem_ai_inference_engine.types import JobStatus
 
 
 class ProgressInfo(BaseModel):

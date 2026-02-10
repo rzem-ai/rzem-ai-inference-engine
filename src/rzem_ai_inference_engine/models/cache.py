@@ -10,8 +10,8 @@ from typing import Any, Callable
 import torch
 from loguru import logger
 
-from inference_engine.models.memory import estimate_model_size, get_free_vram
-from inference_engine.types import EventType, ModelLoadedEvent, ModelLoadingEvent, ModelUnloadedEvent
+from rzem_ai_inference_engine.models.memory import estimate_model_size, get_free_vram
+from rzem_ai_inference_engine.types import EventType, ModelLoadedEvent, ModelLoadingEvent, ModelUnloadedEvent
 
 # Reserve 1 GB for intermediate tensors during inference
 _WORKING_MEMORY_BUFFER = 1 * (1024**3)

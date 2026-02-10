@@ -10,9 +10,9 @@
 ## Package Layout
 
 ```
-src/inference_engine/
+src/rzem_ai_inference_engine/
 ├── __init__.py              # Public exports
-├── __main__.py              # python -m inference_engine
+├── __main__.py              # python -m rzem_ai_inference_engine
 ├── engine.py                # InferenceEngine (main entry point)
 ├── types.py                 # All shared types
 ├── cli.py                   # Click CLI (generate + serve commands)
@@ -319,7 +319,7 @@ Engine callbacks fire on the processor thread. `JobStateStore` bridges to the as
 
 ### CLI
 
-`inference-engine serve --host --port --device --vram-limit --output-dir` starts a uvicorn server. The `scripts/server.sh` helper supports start/stop/restart/status with PID file management.
+`rzem-ai-inference-engine serve --host --port --device --vram-limit --output-dir` starts a uvicorn server. The `scripts/server.sh` helper supports start/stop/restart/status with PID file management.
 
 ## Queue and Processing
 

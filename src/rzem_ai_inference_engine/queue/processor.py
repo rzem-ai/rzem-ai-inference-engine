@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Callable
 
 from loguru import logger
 
-from inference_engine.types import (
+from rzem_ai_inference_engine.types import (
     CompletedEvent,
     EventType,
     FailedEvent,
@@ -17,10 +17,10 @@ from inference_engine.types import (
 )
 
 if TYPE_CHECKING:
-    from inference_engine.models.cache import ModelCache
-    from inference_engine.pipeline.base import BasePipeline
-    from inference_engine.queue.manager import JobQueue
-    from inference_engine.types import TransformerType
+    from rzem_ai_inference_engine.models.cache import ModelCache
+    from rzem_ai_inference_engine.pipeline.base import BasePipeline
+    from rzem_ai_inference_engine.queue.manager import JobQueue
+    from rzem_ai_inference_engine.types import TransformerType
 
 
 class JobProcessor:
