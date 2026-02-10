@@ -224,6 +224,17 @@ class ZImagePipeline(BasePipeline):
         preview_interval = preview_config.interval if preview_config else 5
         preview_max_size = preview_config.max_size if preview_config else 256
 
+        # Emit initial noise preview (step 0)
+        if want_previews:
+            try:
+                noise_preview = self._generate_preview(latents, vae, preview_max_size)
+            except Exception:
+                noise_preview = None
+            progress_cb(ProgressEvent(
+                job_id="", step=0, total_steps=num_steps,
+                preview_image=noise_preview,
+            ))
+
         # ── 4. Denoising loop (Z-Image Euler) ────────────────────────
         with torch.no_grad():
             for step_idx in range(num_steps):

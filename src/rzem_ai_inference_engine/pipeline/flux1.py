@@ -286,6 +286,18 @@ class Flux1DevPipeline(BasePipeline):
         preview_interval = preview_config.interval if preview_config else 5
         preview_max_size = preview_config.max_size if preview_config else 256
 
+        # Emit initial noise preview (step 0)
+        if want_previews:
+            try:
+                spatial_latents = self._unpack_latents(latents, latent_h, latent_w)
+                noise_preview = self._generate_preview(spatial_latents, preview_vae, preview_max_size)
+            except Exception:
+                noise_preview = None
+            progress_cb(ProgressEvent(
+                job_id="", step=0, total_steps=num_steps,
+                preview_image=noise_preview,
+            ))
+
         # Denoising loop
         with torch.no_grad():
             for i in range(num_steps):
