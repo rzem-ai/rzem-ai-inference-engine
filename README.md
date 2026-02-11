@@ -19,7 +19,7 @@ All models support LoRA weight patching with automatic format detection (Kohya, 
 pip install -e .
 ```
 
-Requires Python 3.10+ and PyTorch 2.0+. GPU with 24+ GB VRAM recommended.
+Requires Python 3.10+ and PyTorch 2.0+. GPU with 24+ GB VRAM recommended. Apple Silicon M3+ with PyTorch 2.3+ is supported (MPS backend).
 
 ## Usage
 
@@ -115,6 +115,21 @@ When VRAM is insufficient for the next model, the cache evicts the **smallest un
 
 For FLUX.1 Dev on GPUs with ~32 GB VRAM, the pipeline automatically sequences model loading: text encoders are used then released before the 22 GB transformer is loaded.
 
+### Dtype Selection
+
+All pipelines resolve dtype automatically via `preferred_dtype(device)`:
+
+| Device | Dtype | Notes |
+|---|---|---|
+| CUDA (Ampere+) | bfloat16 | Native tensor-core support |
+| MPS (M3+) | bfloat16 | Native GPU ALU support (PyTorch 2.3+) |
+| CPU | float32 | No reduced-precision benefit |
+
+### Apple Silicon Notes
+
+- On MPS with unified memory, cache eviction is effectively a no-op — all models share the same physical RAM. Use `--vram-limit` to constrain memory if needed.
+- GGUF quantized models are slower on MPS than full-precision bfloat16 due to unoptimized dequantization kernels. Use full-precision models for best performance.
+
 ## Events
 
 | Event | Payload | When |
@@ -132,18 +147,17 @@ For FLUX.1 Dev on GPUs with ~32 GB VRAM, the pipeline automatically sequences mo
 ## Test Scripts
 
 ```bash
-bash scripts/test_flux1.sh         # FLUX.1 Dev (BFL repo)
-bash scripts/test_flux1_alt.sh     # FLUX.1 Dev (separate repos)
-bash scripts/test_zimage.sh        # Z-Image Turbo
-bash scripts/test_flux2.sh         # FLUX.2 Dev
-bash scripts/test_qwen_image.sh    # Qwen-Image
-bash scripts/test_with_lora.sh     # LoRA application
-bash scripts/test_all.sh           # Run all tests
+bash scripts/test_flux1.sh            # FLUX.1 Dev (BFL repo)
+bash scripts/test_flux1_alt.sh        # FLUX.1 Dev (separate repos)
+bash scripts/test_flux1_gguf.sh       # FLUX.1 Dev (GGUF Q8_0 transformer)
+bash scripts/test_zimage.sh           # Z-Image Turbo
+bash scripts/test_flux1_lora.sh       # FLUX.1 Dev + LoRA (bf16)
+bash scripts/test_flux1_gguf_lora.sh  # FLUX.1 Dev + LoRA (GGUF Q8_0)
 ```
 
 ## Dependencies
 
-- **PyTorch** >= 2.0 (CUDA recommended)
+- **PyTorch** >= 2.0 (CUDA recommended, MPS supported on M3+ with PyTorch 2.3+)
 - **diffusers** >= 0.36
 - **transformers** >= 4.40
 - accelerate, safetensors, huggingface-hub

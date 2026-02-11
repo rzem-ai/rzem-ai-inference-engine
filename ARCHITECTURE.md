@@ -32,7 +32,7 @@ src/rzem_ai_inference_engine/
 ├── models/
 │   ├── cache.py             # ModelCache (two-tier VRAM/RAM)
 │   ├── loader.py            # ModelLoader (path resolution)
-│   └── memory.py            # VRAM estimation, device detection
+│   └── memory.py            # VRAM estimation, device detection, preferred_dtype()
 ├── lora/
 │   └── applicator.py        # LoRA loading, format detection, patching
 └── queue/
@@ -120,6 +120,22 @@ Eviction strategy:
 1. Sort unlocked VRAM entries by size (ascending)
 2. Move smallest to RAM via `.to("cpu")` + `torch.cuda.empty_cache()` (CUDA only; no-op on MPS/CPU)
 3. Repeat until enough space is available (including 1 GB working buffer)
+
+## Dtype Selection (`memory.py`)
+
+All pipelines and the LoRA applicator resolve dtype via `preferred_dtype(device)`:
+
+| Device | Dtype | Reason |
+|---|---|---|
+| CUDA (Ampere+) | bfloat16 | Native tensor-core support, wide dynamic range |
+| MPS (M3+, PyTorch 2.3+) | bfloat16 | Native GPU ALU support |
+| CPU | float32 | No GPU to benefit from reduced precision |
+
+### MPS Performance Notes
+
+- **bfloat16 is correct on M3+**: Apple Silicon M3 and later have native bfloat16 GPU ALUs. Tested: float16 on MPS M3 is ~19% slower than bfloat16 for FLUX.1 denoising.
+- **GGUF is counterproductive on MPS**: Q8_0 quantization is slower than full-precision bfloat16 because the dequantization kernels are not MPS-optimized. The bandwidth savings are negated by dequant overhead.
+- **Cache eviction is a no-op on MPS**: `get_free_vram()` returns a 2^40 sentinel for MPS since unified memory has no separate VRAM pool. Eviction only triggers if `--vram-limit` is explicitly set.
 
 ## Pipeline Implementations
 
@@ -219,7 +235,7 @@ class CacheEntry:
     key: str           # "path::role" composite key
     model: Any         # torch.nn.Module or tokenizer
     size_bytes: int    # Estimated from parameters + buffers
-    device: str        # "cuda" or "cpu"
+    device: str        # "cuda", "mps", or "cpu"
     last_used: float   # timestamp for LRU
     _locks: int        # Re-entrant lock count (>0 = cannot evict)
 ```

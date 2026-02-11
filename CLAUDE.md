@@ -39,7 +39,7 @@ bash scripts/test_flux1_gguf_lora.sh  # FLUX.1 Dev + LoRA (GGUF Q8_0)
   - `qwen_image.py` — Qwen-Image: 20B MMDiT, true CFG, Qwen3 encoding
 - `src/rzem_ai_inference_engine/models/cache.py` — Two-tier VRAM/RAM cache, smallest-first eviction
 - `src/rzem_ai_inference_engine/models/loader.py` — Path resolution (local, HF repo, HF repo+file)
-- `src/rzem_ai_inference_engine/models/memory.py` — VRAM estimation and device detection
+- `src/rzem_ai_inference_engine/models/memory.py` — VRAM estimation, device detection, `preferred_dtype()`
   - `lora_applicator.py` — LoRA format detection and forward-hook application
 - `src/rzem_ai_inference_engine/queue/` — Job queue (`manager.py`) and processor (`processor.py`)
 - `src/rzem_ai_inference_engine/api/` — REST API (FastAPI)
@@ -78,6 +78,10 @@ Text encoders and transformer don't fit in VRAM simultaneously. Pipeline stages:
 
 Format detection (Kohya, Diffusers, XLabs, AIToolkit, OneTrainer) based on key patterns. Forward-hook approach: `output += F.linear(F.linear(input, down), up) * (strength * alpha/rank)`. No weight modification, works with quantized (GGUF) models. Hooks are removed after inference. Kohya/XLabs keys use BFL naming and require conversion via `_flux1_bfl_to_diffusers()` (fused QKV/linear1 splitting).
 
+### Dtype selection
+
+All pipelines and the LoRA applicator resolve dtype via `preferred_dtype(device)` in `models/memory.py`. Returns bfloat16 for CUDA and MPS (M3+, PyTorch 2.3+), float32 for CPU. Never hardcode `torch.bfloat16` directly — use the helper so dtype logic stays centralized.
+
 ### Event system
 
 Thread-safe callback registration on `InferenceEngine`. Events: JOB_QUEUED, JOB_STARTED, JOB_PROGRESS, JOB_COMPLETED, JOB_FAILED, JOB_CANCELLED, MODEL_LOADING, MODEL_LOADED, MODEL_UNLOADED.
@@ -95,7 +99,7 @@ FastAPI app factory in `api/app.py` → `create_app(device, vram_limit_gb, outpu
 - **Z-Image text encoder**: Uses `Qwen3Model` (not `AutoModelForCausalLM`), `hidden_states[-2]`, mask-filtered to 2D.
 - **Z-Image v-prediction**: `noise_pred = -model_output` (negate the output).
 - **Z-Image `_time_shift` boundary**: Python floats raise on `1/0`. The function has explicit boundary checks for `t <= 0` (returns 0) and `t >= 1` (returns 1). The FLUX.1 version uses torch tensors which handle inf gracefully.
-- **MPS/Apple Silicon**: Device detection, cache eviction, and generator all handle MPS. bfloat16 requires PyTorch 2.3+. No `empty_cache()` equivalent for MPS. Use `--vram-limit` to constrain unified memory usage.
+- **MPS/Apple Silicon**: Device detection, cache eviction, and generator all handle MPS. bfloat16 requires PyTorch 2.3+ (native M3+ GPU ALU support). No `empty_cache()` equivalent for MPS. Use `--vram-limit` to constrain unified memory usage. GGUF quantization is slower on MPS than full-precision bfloat16 due to unoptimized dequantization kernels.
 
 ## Dependencies
 

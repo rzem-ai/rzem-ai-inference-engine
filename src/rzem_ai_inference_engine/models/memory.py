@@ -51,6 +51,18 @@ def get_total_vram(device: torch.device) -> int:
     return 2**40
 
 
+def preferred_dtype(device: torch.device) -> torch.dtype:
+    """Return the best reduced-precision dtype for *device*.
+
+    - CUDA (Ampere+): bfloat16 — native tensor-core support, wide dynamic range.
+    - MPS (M3+, PyTorch 2.3+): bfloat16 — native GPU ALU support.
+    - CPU: float32 — no GPU to benefit from reduced precision.
+    """
+    if device.type in ("cuda", "mps"):
+        return torch.bfloat16
+    return torch.float32
+
+
 def detect_device() -> torch.device:
     """Auto-detect the best available device: cuda > mps > cpu."""
     if torch.cuda.is_available():

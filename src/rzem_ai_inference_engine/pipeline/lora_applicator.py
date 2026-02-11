@@ -12,6 +12,7 @@ from loguru import logger
 from safetensors.torch import load_file
 from torch.utils.hooks import RemovableHandle
 
+from rzem_ai_inference_engine.models.memory import preferred_dtype
 from rzem_ai_inference_engine.types import LoraFormat, TransformerType
 
 # ── Parsing tree for OneTrainer underscore→dot conversion ─────────────
@@ -604,7 +605,7 @@ class LoraApplicator:
         combined_scale = strength * scale
 
         device = next(module.parameters()).device
-        dtype = torch.bfloat16  # LoRA computation always in bf16
+        dtype = preferred_dtype(device)
         up_d = up.to(device=device, dtype=dtype)
         down_d = down.to(device=device, dtype=dtype)
 

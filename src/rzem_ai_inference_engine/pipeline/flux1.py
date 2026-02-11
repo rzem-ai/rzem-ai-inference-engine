@@ -10,6 +10,7 @@ from loguru import logger
 
 from rzem_ai_inference_engine.pipeline.lora_applicator import LoraApplicator
 from rzem_ai_inference_engine.models.loader import ModelLoader
+from rzem_ai_inference_engine.models.memory import preferred_dtype
 from rzem_ai_inference_engine.pipeline.base import BasePipeline
 from rzem_ai_inference_engine.types import ModelSpec, ProgressEvent, TransformerType
 
@@ -76,7 +77,7 @@ class Flux1DevPipeline(BasePipeline):
         from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 
         device = cache._device
-        dtype = torch.bfloat16
+        dtype = preferred_dtype(device)
 
         seed = params.seed if params.seed >= 0 else torch.randint(0, 2**32, (1,)).item()
         generator = torch.Generator(device="cpu").manual_seed(seed)
