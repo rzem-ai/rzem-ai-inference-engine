@@ -53,29 +53,37 @@ bash scripts/test_flux1_gguf_lora.sh  # FLUX.1 Dev + LoRA (GGUF Q8_0)
 ## Key Patterns
 
 ### Model path resolution
+
 Three formats: local path, `org/repo` (snapshot_download), `org/repo/file.ext` (hf_hub_download). Pipelines use `_resolve_sub()` for repos with subfolders (transformer/, vae/, text_encoder/, etc.). Download filter: `*.safetensors, *.bin, *.gguf, *.json, *.txt, *.model, *.tiktoken, *.py`.
 
 ### GGUF quantization
+
 FLUX.1 pipeline detects `.gguf` extension on the transformer path and passes `GGUFQuantizationConfig(compute_dtype=dtype)` to `from_single_file`. Requires the `gguf` pip package. Weights stay quantized (uint8) and are dequantized on-the-fly during forward passes.
 
 ### Cache keys
+
 Composite: `"{path}::{role}"` — e.g. `"black-forest-labs/FLUX.1-dev::transformer"`.
 
 ### Sequential model offloading (FLUX.1)
+
 Text encoders and transformer don't fit in VRAM simultaneously. Pipeline stages: encode text -> release encoders -> load transformer -> denoise -> release -> load VAE -> decode. Other pipelines lock all models at once (they're smaller).
 
 ### Denoising
+
 - **Timestep range**: Transformers expect timesteps in **[0, 1]**, not [0, 1000]. FLUX.1 passes sigma directly. Z-Image uses `1 - sigma`.
 - **Euler step**: `latents = latents + (sigma_next - sigma_curr) * noise_pred`
 - **Time schedule**: Linear interpolation mu formula: `mu = m * seq_len + b` where `m = (1.15 - 0.5) / (4096 - 256)`. Applied via exponential time shift: `exp(mu) / (exp(mu) + (1/t - 1)^sigma)`.
 
 ### LoRA system
+
 Format detection (Kohya, Diffusers, XLabs, AIToolkit, OneTrainer) based on key patterns. Forward-hook approach: `output += F.linear(F.linear(input, down), up) * (strength * alpha/rank)`. No weight modification, works with quantized (GGUF) models. Hooks are removed after inference. Kohya/XLabs keys use BFL naming and require conversion via `_flux1_bfl_to_diffusers()` (fused QKV/linear1 splitting).
 
 ### Event system
+
 Thread-safe callback registration on `InferenceEngine`. Events: JOB_QUEUED, JOB_STARTED, JOB_PROGRESS, JOB_COMPLETED, JOB_FAILED, JOB_CANCELLED, MODEL_LOADING, MODEL_LOADED, MODEL_UNLOADED.
 
 ### REST API
+
 FastAPI app factory in `api/app.py` → `create_app(device, vram_limit_gb, output_dir)`. WebSocket at `/ws` broadcasts all job events as JSON. Threading bridge: engine callbacks fire on processor thread, `JobStateStore` uses `loop.call_soon_threadsafe` to schedule async broadcasts. Images saved as `{job_id}.png` in output_dir, served via `GET /jobs/{id}/image`. `GET /models` and `GET /models/all` use `huggingface_hub.scan_cache_dir()` to list locally cached models.
 
 ## Common Pitfalls
