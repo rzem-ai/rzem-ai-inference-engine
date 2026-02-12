@@ -21,6 +21,32 @@ pip install -e .
 
 Requires Python 3.10+ and PyTorch 2.0+. GPU with 24+ GB VRAM recommended. Apple Silicon M3+ with PyTorch 2.3+ is supported (MPS backend).
 
+## Distribution
+
+### Standalone Executable
+
+Build a standalone executable that bundles all dependencies (models are still user-provided):
+
+```bash
+# Build server variant (generate + serve commands, ~3-4 GB)
+bash scripts/build_executable.sh server
+
+# Build CLI variant (generate only, ~2.5-3.5 GB)
+bash scripts/build_executable.sh cli
+
+# Build both variants (default)
+bash scripts/build_executable.sh all
+
+# Run the executables
+./dist/rzem-ai-inference-engine-server/rzem-ai-inference-engine-server generate --help
+./dist/rzem-ai-inference-engine-server/rzem-ai-inference-engine-server serve --help
+./dist/rzem-ai-inference-engine-cli/rzem-ai-inference-engine-cli generate --help
+```
+
+See [packaging/README.md](packaging/README.md) for detailed build instructions, platform requirements, and distribution options.
+
+**Note:** Executables do not include model weights. Models must be downloaded separately via HuggingFace Hub or provided as local paths.
+
 ## Usage
 
 ### Python API
