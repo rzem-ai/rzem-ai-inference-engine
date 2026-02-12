@@ -6,13 +6,13 @@ This directory contains PyInstaller configuration for building standalone execut
 
 ```bash
 # Build both variants (default)
-bash scripts/build_executable.sh all
+bash build.sh all
 
 # Build only server variant (generate + serve)
-bash scripts/build_executable.sh server
+bash build.sh server
 
 # Build only CLI variant (generate only)
-bash scripts/build_executable.sh cli
+bash build.sh cli
 
 # Run the executable
 ./dist/rzem-ai-inference-engine-server/rzem-ai-inference-engine-server --help
@@ -21,12 +21,14 @@ bash scripts/build_executable.sh cli
 ## Why Use PyInstaller?
 
 **Advantages:**
+
 - No Python installation required on target machines
 - All dependencies bundled (PyTorch, diffusers, transformers)
 - Simplified deployment in restricted environments
 - Consistent Python environment across systems
 
 **Trade-offs:**
+
 - Large executable size (~3-4 GB for server, ~2.5-3.5 GB for CLI)
 - Platform-specific builds (Linux builds won't run on Windows/macOS)
 - Model weights NOT included (still downloaded from HuggingFace Hub)
@@ -40,6 +42,7 @@ bash scripts/build_executable.sh cli
 | **CLI** | ~2.5-3.5 GB | `generate` only | Image generation without web server |
 
 Both variants include:
+
 - PyTorch (CUDA, MPS, or CPU based on installed version)
 - All four model pipelines (FLUX.1, FLUX.2, Z-Image, Qwen-Image)
 - LoRA support
@@ -73,7 +76,7 @@ The build script automatically detects your platform and PyTorch variant:
 pip install torch --index-url https://download.pytorch.org/whl/cu121
 
 # Build
-bash scripts/build_executable.sh all
+bash build.sh all
 
 # Result: dist/rzem-ai-inference-engine-{server,cli}/ (Linux-CUDA)
 ```
@@ -85,7 +88,7 @@ bash scripts/build_executable.sh all
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 # Build
-bash scripts/build_executable.sh all
+bash build.sh all
 
 # Result: dist/rzem-ai-inference-engine-{server,cli}/ (Linux-CPU)
 ```
@@ -97,7 +100,7 @@ bash scripts/build_executable.sh all
 pip install torch
 
 # Build
-bash scripts/build_executable.sh all
+bash build.sh all
 
 # Result: dist/rzem-ai-inference-engine-{server,cli}/ (macOS-MPS)
 ```
@@ -109,7 +112,7 @@ bash scripts/build_executable.sh all
 pip install torch --index-url https://download.pytorch.org/whl/cu121
 
 # Build
-bash scripts/build_executable.sh all
+bash build.sh all
 
 # Result: dist/rzem-ai-inference-engine-{server,cli}/ (Windows-CUDA)
 ```
@@ -121,7 +124,7 @@ bash scripts/build_executable.sh all
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 # Build
-bash scripts/build_executable.sh all
+bash build.sh all
 
 # Result: dist/rzem-ai-inference-engine-{server,cli}/ (Windows-CPU)
 ```
@@ -179,6 +182,7 @@ bash scripts/build_executable.sh all
 **Important:** Model weights are NOT bundled in the executable. You must:
 
 1. **Download models from HuggingFace Hub** (automatic on first use):
+
    ```bash
    # First run will download models to ~/.cache/huggingface/hub/
    ./dist/rzem-ai-inference-engine-server/rzem-ai-inference-engine-server generate \
@@ -187,6 +191,7 @@ bash scripts/build_executable.sh all
    ```
 
 2. **Or use local model paths**:
+
    ```bash
    ./dist/rzem-ai-inference-engine-server/rzem-ai-inference-engine-server generate \
        --transformer-model /path/to/local/flux.safetensors \
@@ -194,6 +199,7 @@ bash scripts/build_executable.sh all
    ```
 
 3. **Set HuggingFace token** (for private models):
+
    ```bash
    export HF_TOKEN=your_token_here
    # Or place in ~/.huggingface/token
@@ -204,6 +210,7 @@ bash scripts/build_executable.sh all
 ### Packaging for End Users
 
 1. **Zip the distribution folder**:
+
    ```bash
    cd dist
    zip -r rzem-ai-inference-engine-server-linux-cuda.zip rzem-ai-inference-engine-server/
@@ -228,6 +235,7 @@ Inform users of the minimum requirements:
 | CLI (CPU) | Any | 64+ GB RAM | None | 50+ GB (slow) |
 
 Storage includes:
+
 - Executable: ~3-4 GB
 - Model cache: 10-50 GB (varies by model)
 - Output images: varies
@@ -261,6 +269,7 @@ See `packaging/pyinstaller/README.md` for technical details.
 **Cause:** Missing dependency or incorrect spec file hiddenimports.
 
 **Fix:**
+
 1. Check PyInstaller build output for warnings
 2. Add missing module to spec file's `hiddenimports`
 3. Or add to `packaging/pyinstaller/hooks/hook-*.py`
@@ -271,6 +280,7 @@ See `packaging/pyinstaller/README.md` for technical details.
 **Cause:** Dynamic import not discovered by PyInstaller.
 
 **Fix:**
+
 1. Identify the missing module
 2. Add to spec file's `hiddenimports` list
 3. Rebuild
@@ -280,11 +290,13 @@ See `packaging/pyinstaller/README.md` for technical details.
 **Cause:** Built with CPU-only PyTorch.
 
 **Fix:**
+
 1. Uninstall PyTorch: `pip uninstall torch`
 2. Install CUDA PyTorch: `pip install torch --index-url https://download.pytorch.org/whl/cu121`
 3. Rebuild
 
 Verify before building:
+
 ```bash
 python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 ```
@@ -292,10 +304,12 @@ python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 ### Build is Too Large
 
 **Causes:**
+
 - PyTorch CUDA builds include large CUDA libraries (~2 GB)
 - All four pipelines are included (even if you only use one)
 
 **Mitigations:**
+
 1. Use CPU-only PyTorch for smaller builds (CPU inference only)
 2. Remove unused dependencies from spec file (advanced)
 3. Use one-file mode with UPX compression (slower startup)
@@ -305,6 +319,7 @@ python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 **Cause:** Model paths are system-specific.
 
 **Fix:** Instruct users to:
+
 1. Use HuggingFace Hub model names (e.g., `black-forest-labs/FLUX.1-dev`)
 2. Or provide absolute local paths
 3. Ensure `HF_TOKEN` is set for private models
@@ -319,7 +334,7 @@ python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 
 - **Build issues:** See `packaging/pyinstaller/README.md` for technical details
 - **Runtime issues:** Same as pip-installed version - check main README.md
-- **PyInstaller docs:** https://pyinstaller.org/en/stable/
+- **PyInstaller docs:** <https://pyinstaller.org/en/stable/>
 
 ## Alternatives to PyInstaller
 

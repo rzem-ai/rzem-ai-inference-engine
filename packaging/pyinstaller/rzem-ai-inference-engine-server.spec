@@ -19,8 +19,9 @@ from pathlib import Path
 
 block_cipher = None
 
-# Project root (two levels up from this spec file)
-project_root = Path(__file__).parent.parent.parent.resolve()
+# SPECPATH is provided by PyInstaller — points to the directory containing this spec file
+spec_dir = Path(SPECPATH)
+project_root = (spec_dir / '..' / '..').resolve()
 src_path = project_root / 'src'
 
 a = Analysis(
@@ -142,7 +143,7 @@ a = Analysis(
         'rzem_ai_inference_engine.queue.manager',
         'rzem_ai_inference_engine.queue.processor',
     ],
-    hookspath=[str(Path(__file__).parent / 'hooks')],
+    hookspath=[str(spec_dir / 'hooks')],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],

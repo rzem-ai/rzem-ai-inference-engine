@@ -3,12 +3,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$PROJECT_DIR/scripts/_activate.sh"
 
 echo "Cleaning PyInstaller build artifacts..."
 
-cd "$PROJECT_ROOT"
+cd "$PROJECT_DIR"
 
 # Remove build directories
 if [ -d "build" ]; then

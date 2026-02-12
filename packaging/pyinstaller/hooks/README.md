@@ -58,10 +58,10 @@ After modifying hooks, test with:
 
 ```bash
 # Clean previous builds
-bash scripts/clean_build.sh
+bash clean.sh
 
 # Build and check for missing imports
-bash scripts/build_executable.sh server
+bash build.sh server
 
 # If build succeeds, test the executable
 ./dist/rzem-ai-inference-engine-server/rzem-ai-inference-engine-server --help

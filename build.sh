@@ -3,14 +3,14 @@
 # Auto-detects platform (CUDA on Linux/Windows, MPS on macOS, CPU fallback)
 #
 # Usage:
-#   bash scripts/build_executable.sh server    # Build server variant (generate + serve)
-#   bash scripts/build_executable.sh cli       # Build CLI variant (generate only)
-#   bash scripts/build_executable.sh all       # Build both variants (default)
+#   bash build.sh server    # Build server variant (generate + serve)
+#   bash build.sh cli       # Build CLI variant (generate only)
+#   bash build.sh all       # Build both variants (default)
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$PROJECT_DIR/scripts/_activate.sh"
 
 # Check PyInstaller
 if ! command -v pyinstaller &> /dev/null; then
@@ -63,7 +63,7 @@ detect_platform() {
 # Build function
 build_variant() {
     local variant=$1
-    local spec_file="$PROJECT_ROOT/packaging/pyinstaller/rzem-ai-inference-engine-${variant}.spec"
+    local spec_file="$PROJECT_DIR/packaging/pyinstaller/rzem-ai-inference-engine-${variant}.spec"
     local platform=$(detect_platform)
 
     if [ ! -f "$spec_file" ]; then
@@ -77,7 +77,7 @@ build_variant() {
     echo "Spec file: $spec_file"
     echo "=========================================="
 
-    cd "$PROJECT_ROOT"
+    cd "$PROJECT_DIR"
     pyinstaller "$spec_file" --clean --noconfirm
 
     # Check for executable (Unix vs Windows)

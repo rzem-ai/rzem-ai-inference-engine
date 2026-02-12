@@ -16,7 +16,7 @@ rzem-ai-inference-engine generate --prompt "..." --transformer-model <path> --tr
 
 # CLI — REST API server
 rzem-ai-inference-engine serve --host 127.0.0.1 --port 8000 --device auto --output-dir ./output
-bash scripts/server.sh start       # Background with PID management
+bash server.sh start               # Background with PID management
 
 # Test scripts
 bash scripts/test_flux1.sh        # FLUX.1 Dev (all from BFL repo)

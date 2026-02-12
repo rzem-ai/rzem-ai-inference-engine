@@ -43,6 +43,7 @@ a = Analysis(
 ### Build Modes
 
 **One-Folder Mode** (current configuration):
+
 ```python
 exe = EXE(
     ...
@@ -63,14 +64,17 @@ coll = COLLECT(
 **Result:** `dist/rzem-ai-inference-engine-server/` directory with executable and `_internal/` subfolder.
 
 **Pros:**
+
 - Faster startup (no extraction to temp dir)
 - Easier debugging (can inspect bundled files)
 - Better for large dependencies like PyTorch
 
 **Cons:**
+
 - Multiple files to distribute (use zip for distribution)
 
 **One-File Mode** (not used, shown for reference):
+
 ```python
 exe = EXE(
     pyz,
@@ -88,9 +92,11 @@ exe = EXE(
 **Result:** Single `rzem-ai-inference-engine-server` executable file.
 
 **Pros:**
+
 - Single file to distribute
 
 **Cons:**
+
 - Slower startup (extracts to temp on each run)
 - Large file (3-4 GB)
 - Harder to debug
@@ -195,11 +201,13 @@ datas = collect_data_files('package_name', include_py_files=True)
 After modifying hooks:
 
 1. **Clean build:**
+
    ```bash
-   bash scripts/clean_build.sh
+   bash clean.sh
    ```
 
 2. **Rebuild with verbose output:**
+
    ```bash
    cd /path/to/project
    pyinstaller packaging/pyinstaller/rzem-ai-inference-engine-server.spec \
@@ -210,6 +218,7 @@ After modifying hooks:
    Look for "WARNING: Hidden import '...' not found" in build output.
 
 4. **Test executable:**
+
    ```bash
    ./dist/rzem-ai-inference-engine-server/rzem-ai-inference-engine-server --help
    ```
@@ -219,15 +228,18 @@ After modifying hooks:
 ### Linux CUDA
 
 **What's included:**
+
 - PyTorch with CUDA binaries (~2 GB)
 - cuDNN, cuBLAS, NCCL libraries
 - NVIDIA runtime libraries
 
 **Requirements on target system:**
+
 - NVIDIA drivers (no CUDA toolkit needed)
 - libc >= 2.27 (Ubuntu 18.04+, CentOS 8+)
 
 **Testing:**
+
 ```bash
 ./dist/rzem-ai-inference-engine-server/rzem-ai-inference-engine-server generate \
     --device cuda:0 \
@@ -237,14 +249,17 @@ After modifying hooks:
 ### macOS MPS (Apple Silicon)
 
 **What's included:**
+
 - PyTorch with MPS backend
 - Accelerate framework bindings
 
 **Requirements on target system:**
+
 - macOS 13.0+ (Ventura or later)
 - Apple Silicon M1/M2/M3 series
 
 **Testing:**
+
 ```bash
 ./dist/rzem-ai-inference-engine-server/rzem-ai-inference-engine-server generate \
     --device mps \
@@ -254,15 +269,18 @@ After modifying hooks:
 ### Windows CUDA
 
 **What's included:**
+
 - PyTorch with CUDA binaries
 - cuDNN, cuBLAS DLLs
 - Microsoft Visual C++ redistributables
 
 **Requirements on target system:**
+
 - NVIDIA drivers
 - Windows 10/11
 
 **Testing:**
+
 ```powershell
 .\dist\rzem-ai-inference-engine-server\rzem-ai-inference-engine-server.exe generate `
     --device cuda:0 `
@@ -272,14 +290,17 @@ After modifying hooks:
 ### Windows CPU
 
 **What's included:**
+
 - PyTorch CPU-only
 - MKL (Math Kernel Library) for optimized CPU inference
 
 **Requirements on target system:**
+
 - Windows 10/11
 - 64+ GB RAM (models are large)
 
 **Testing:**
+
 ```powershell
 .\dist\rzem-ai-inference-engine-server\rzem-ai-inference-engine-server.exe generate `
     --device cpu `
@@ -307,6 +328,7 @@ coll = COLLECT(
 ```
 
 **Trade-offs:**
+
 - ~10-20% size reduction
 - Slower startup
 - Can break CUDA libraries
@@ -315,6 +337,7 @@ coll = COLLECT(
 ### Code Signing (macOS/Windows)
 
 **macOS:**
+
 ```python
 exe = EXE(
     ...
@@ -325,6 +348,7 @@ exe = EXE(
 
 **Windows:**
 After building, sign with signtool:
+
 ```powershell
 signtool sign /f certificate.pfx /p password /t http://timestamp.digicert.com `
     dist\rzem-ai-inference-engine-server\rzem-ai-inference-engine-server.exe
@@ -335,6 +359,7 @@ signtool sign /f certificate.pfx /p password /t http://timestamp.digicert.com `
 To reduce size, exclude unused transformers model classes:
 
 1. **Identify unused models** (example: if you never use Qwen-Image):
+
    ```python
    excludes=[
        'transformers.models.qwen2',
@@ -343,6 +368,7 @@ To reduce size, exclude unused transformers model classes:
    ```
 
 2. **Remove from hiddenimports:**
+
    ```python
    # hiddenimports = [
    #     ...
@@ -370,6 +396,7 @@ pyinstaller packaging/pyinstaller/rzem-ai-inference-engine-server.spec \
 **Cause:** Missing hidden import.
 
 **Fix:**
+
 1. Add `'X'` to spec file's `hiddenimports` list
 2. Or add to appropriate hook file
 3. Rebuild
@@ -379,8 +406,10 @@ pyinstaller packaging/pyinstaller/rzem-ai-inference-engine-server.spec \
 **Cause:** Native library not bundled.
 
 **Fix:**
+
 1. Find library path: `python -c "import X; print(X.__file__)"`
 2. Add to spec file's `binaries`:
+
    ```python
    binaries=[
        ('/path/to/libX.so', 'lib'),
@@ -398,8 +427,10 @@ pyinstaller packaging/pyinstaller/rzem-ai-inference-engine-server.spec \
 **Cause:** PyInstaller analyzing too many files.
 
 **Fix:**
+
 1. Check `hiddenimports` for overly broad patterns
 2. Use `--exclude-module` for large unused packages:
+
    ```bash
    pyinstaller ... --exclude-module matplotlib --exclude-module pandas
    ```
