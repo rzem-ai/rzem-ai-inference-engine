@@ -2,15 +2,15 @@
 # Start / stop / restart the REST API server.
 #
 # Usage:
-#   bash scripts/server.sh start   [--port 8000] [--device auto] [--output-dir ./output]
-#   bash scripts/server.sh stop
-#   bash scripts/server.sh restart [...]
-#   bash scripts/server.sh status
+#   bash server.sh start   [--port 8000] [--device auto] [--output-dir ./output]
+#   bash server.sh stop
+#   bash server.sh restart [...]
+#   bash server.sh status
+
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-source "$SCRIPT_DIR/_activate.sh"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$PROJECT_DIR/scripts/_activate.sh"
 
 PID_FILE="$PROJECT_DIR/.server.pid"
 LOG_FILE="$PROJECT_DIR/server.log"

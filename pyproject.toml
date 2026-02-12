@@ -24,6 +24,11 @@ dependencies = [
 [project.scripts]
 rzem-ai-inference-engine = "rzem_ai_inference_engine.cli:main"
 
+[project.optional-dependencies]
+build = [
+    "pyinstaller>=5.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
