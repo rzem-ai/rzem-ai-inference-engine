@@ -60,12 +60,12 @@ def create_app(
                     "ws": "/ws",
                 },
             )
-            announcer.register()
+            await announcer.register()
 
         yield
 
         if announcer is not None:
-            announcer.unregister()
+            await announcer.unregister()
 
         logger.info("Shutting down inference engine")
         engine.shutdown()

@@ -76,10 +76,11 @@ class ServiceAnnouncer:
     # Public API
     # ------------------------------------------------------------------
 
-    def register(self) -> None:
+    async def register(self) -> None:
         """Announce the service on the local network via mDNS."""
         try:
-            from zeroconf import ServiceInfo, Zeroconf
+            from zeroconf import ServiceInfo
+            from zeroconf.asyncio import AsyncZeroconf
         except ImportError:
             logger.warning(
                 "zeroconf package not installed — skipping network announcement. "
@@ -105,17 +106,32 @@ class ServiceAnnouncer:
             server=f"{socket.gethostname()}.local.",
         )
 
-        self._zeroconf = Zeroconf()
-        self._zeroconf.register_service(self._info)
-        logger.info(
-            f"Service announced on LAN: {SERVICE_TYPE} at {ip}:{self._port}"
-        )
+        try:
+            self._zeroconf = AsyncZeroconf()
+            await self._zeroconf.async_register_service(self._info)
+            logger.info(
+                f"Service announced on LAN: {SERVICE_TYPE} at {ip}:{self._port}"
+            )
+        except Exception:
+            logger.opt(exception=True).warning(
+                "Failed to announce service via mDNS — server will still work, "
+                "but LAN discovery is unavailable"
+            )
+            await self._close_zeroconf()
 
-    def unregister(self) -> None:
+    async def unregister(self) -> None:
         """Remove the service announcement and clean up."""
         if self._zeroconf is not None and self._info is not None:
             logger.info("Removing network service announcement")
-            self._zeroconf.unregister_service(self._info)
-            self._zeroconf.close()
+            try:
+                await self._zeroconf.async_unregister_service(self._info)
+            except Exception:
+                logger.opt(exception=True).debug("Error unregistering mDNS service")
+            await self._close_zeroconf()
+
+    async def _close_zeroconf(self) -> None:
+        """Close the AsyncZeroconf instance and reset state."""
+        if self._zeroconf is not None:
+            await self._zeroconf.async_close()
             self._zeroconf = None
             self._info = None
