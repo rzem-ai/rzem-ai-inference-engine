@@ -22,7 +22,8 @@ src/rzem_ai_inference_engine/
 │   ├── routes.py            # HTTP routes (jobs, models, health)
 │   ├── models.py            # Pydantic response models
 │   ├── state.py             # JobStateStore (event → WebSocket bridge)
-│   └── ws.py                # ConnectionManager (WebSocket broadcast)
+│   ├── ws.py                # ConnectionManager (WebSocket broadcast)
+│   └── announce.py          # mDNS/DNS-SD service announcement
 ├── pipeline/
 │   ├── base.py              # BasePipeline ABC
 │   ├── flux1.py             # FLUX.1 Dev
@@ -54,6 +55,11 @@ src/rzem_ai_inference_engine/
 │  │ (event→state)   │──│ broadcasts JSON to all clients      │              │
 │  └────────┬────────┘  └────────────────────────────────────┘              │
 │           │ loop.call_soon_threadsafe                                      │
+│                                                                           │
+│  ┌────────────────────────────────────────────────────────┐               │
+│  │ ServiceAnnouncer (mDNS) — _rzem-ai._tcp.local.        │               │
+│  │ register on startup, unregister on shutdown            │               │
+│  └────────────────────────────────────────────────────────┘               │
 ├───────────▼───────────────────────────────────────────────────────────────┤
 │                        InferenceEngine                                     │
 │                                                                           │
@@ -333,9 +339,29 @@ All job lifecycle events are broadcast as JSON to connected WebSocket clients. T
 
 Engine callbacks fire on the processor thread. `JobStateStore` bridges to the async event loop via `loop.call_soon_threadsafe(asyncio.ensure_future, ws.broadcast(msg))`. This keeps the processor thread non-blocking while delivering real-time updates over WebSocket.
 
+### Network Announcement (`announce.py`)
+
+On startup, the server announces itself on the local network via mDNS/DNS-SD (RFC 6762 / RFC 6763) so that client applications can discover it automatically without manual host/port configuration.
+
+**Protocol**: Multicast DNS — the same mechanism behind Apple Bonjour, Chromecast, and network printer discovery. The `zeroconf` library handles the low-level multicast.
+
+**Service registration**:
+- Service type: `_rzem-ai._tcp.local.`
+- Service name: `RZEM AI Inference Engine._rzem-ai._tcp.local.`
+- TXT record: `version`, `device`, `api=rest`, `ws=/ws`
+- Server hostname: `{hostname}.local.`
+
+**`ServiceAnnouncer` class**:
+- `register()` — Resolves the LAN IP (via UDP route lookup when bound to `0.0.0.0`), creates a `ServiceInfo`, and registers it with a `Zeroconf` instance. Skips gracefully when bound to `127.0.0.1` or when the `zeroconf` package is missing.
+- `unregister()` — Removes the service record and closes the `Zeroconf` instance.
+
+**Lifecycle**: The announcer is created and registered during the FastAPI lifespan startup, and unregistered during shutdown, ensuring the service record is always cleaned up.
+
+**IP resolution**: When the server binds to `0.0.0.0`, `_get_local_ip()` opens a UDP socket to a non-routable address (`10.255.255.255:1`) which triggers the OS routing table to select the appropriate source address — no traffic is actually sent.
+
 ### CLI
 
-`rzem-ai-inference-engine serve --host --port --device --vram-limit --output-dir` starts a uvicorn server. The `server.sh` helper supports start/stop/restart/status with PID file management.
+`rzem-ai-inference-engine serve --host --port --device --vram-limit --output-dir --no-announce` starts a uvicorn server. The `server.sh` helper supports start/stop/restart/status with PID file management. The `--no-announce` flag disables mDNS service announcement.
 
 ## Queue and Processing
 
