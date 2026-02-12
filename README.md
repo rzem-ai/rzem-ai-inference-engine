@@ -130,6 +130,58 @@ Model path arguments accept three formats:
 
 Multi-component HF repos (like `black-forest-labs/FLUX.1-dev`) are handled automatically — the engine resolves subfolders like `transformer/`, `text_encoder/`, `vae/`, etc.
 
+## REST API Server
+
+Start the server to accept jobs over HTTP and receive real-time updates via WebSocket:
+
+```bash
+# Listen on all interfaces (enables LAN discovery)
+rzem-ai-inference-engine serve --host 0.0.0.0 --port 8000 --device auto --output-dir ./output
+
+# Or run as a background daemon
+bash scripts/server.sh start --port 8000 --device cuda
+bash scripts/server.sh status
+bash scripts/server.sh stop
+```
+
+| Endpoint | Description |
+|---|---|
+| `POST /jobs` | Submit a generation job |
+| `GET /jobs` | List all jobs |
+| `GET /jobs/{id}` | Get job details |
+| `GET /jobs/{id}/image` | Download generated image |
+| `DELETE /jobs/{id}` | Cancel a job |
+| `GET /models` | List locally cached HuggingFace models |
+| `GET /health` | Health check with queue stats |
+| `WS /ws` | WebSocket — real-time job event broadcasts (JSON) |
+
+### Network Announcement (LAN Discovery)
+
+When the server binds to a non-localhost address (e.g. `--host 0.0.0.0`), it automatically announces itself on the local network via **mDNS/DNS-SD** — the same protocol used by AirPlay, Chromecast, and network printers. Client applications can discover running servers without manual configuration.
+
+- **Service type**: `_rzem-ai._tcp.local.`
+- **TXT record**: `version`, `device`, `api=rest`, `ws=/ws`
+- **Disable**: `--no-announce`
+
+When bound to `127.0.0.1` (the default), announcement is skipped since the server is only reachable locally.
+
+**Client-side discovery example:**
+
+```python
+from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
+
+class Listener(ServiceListener):
+    def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        info = zc.get_service_info(type_, name)
+        if info:
+            addr = info.parsed_addresses()[0]
+            port = info.port
+            print(f"Found server at {addr}:{port}")
+
+zc = Zeroconf()
+browser = ServiceBrowser(zc, "_rzem-ai._tcp.local.", Listener())
+```
+
 ## VRAM Management
 
 The engine manages a two-tier model cache:
@@ -188,3 +240,5 @@ bash scripts/test_flux1_gguf_lora.sh  # FLUX.1 Dev + LoRA (GGUF Q8_0)
 - **transformers** >= 4.40
 - accelerate, safetensors, huggingface-hub
 - pydantic >= 2.0, Pillow, click, einops, sentencepiece, loguru
+- **zeroconf** >= 0.131 (mDNS network announcement)
+- fastapi >= 0.110, uvicorn[standard] >= 0.27 (REST API server)

@@ -20,6 +20,9 @@ def create_app(
     vram_limit_gb: float | None = None,
     output_dir: str = "./output",
     preview_config: PreviewConfig | None = None,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    announce: bool = True,
 ) -> FastAPI:
     """Create the FastAPI application with engine lifecycle management."""
 
@@ -42,7 +45,27 @@ def create_app(
         app.state.store = store
         app.state.ws_manager = ws_manager
 
+        # Announce on local network via mDNS
+        announcer = None
+        if announce:
+            from rzem_ai_inference_engine.api.announce import ServiceAnnouncer
+
+            announcer = ServiceAnnouncer(
+                host=host,
+                port=port,
+                properties={
+                    "version": "0.1.0",
+                    "device": device,
+                    "api": "rest",
+                    "ws": "/ws",
+                },
+            )
+            announcer.register()
+
         yield
+
+        if announcer is not None:
+            announcer.unregister()
 
         logger.info("Shutting down inference engine")
         engine.shutdown()

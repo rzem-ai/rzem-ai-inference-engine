@@ -197,7 +197,8 @@ def generate(
 @click.option("--output-dir", default="./output", help="Directory for generated images")
 @click.option("--preview-interval", default=None, type=int, help="Generate preview every N steps (enables previews)")
 @click.option("--preview-size", default=256, type=int, help="Max preview dimension in pixels")
-def serve(host: str, port: int, device: str, vram_limit: float | None, output_dir: str, preview_interval: int | None, preview_size: int):
+@click.option("--no-announce", is_flag=True, default=False, help="Disable mDNS network announcement")
+def serve(host: str, port: int, device: str, vram_limit: float | None, output_dir: str, preview_interval: int | None, preview_size: int, no_announce: bool):
     """Start the REST API server."""
     import uvicorn
 
@@ -208,5 +209,13 @@ def serve(host: str, port: int, device: str, vram_limit: float | None, output_di
     if preview_interval is not None:
         preview_config = PreviewConfig(enabled=True, interval=preview_interval, max_size=preview_size)
 
-    app = create_app(device=device, vram_limit_gb=vram_limit, output_dir=output_dir, preview_config=preview_config)
+    app = create_app(
+        device=device,
+        vram_limit_gb=vram_limit,
+        output_dir=output_dir,
+        preview_config=preview_config,
+        host=host,
+        port=port,
+        announce=not no_announce,
+    )
     uvicorn.run(app, host=host, port=port)

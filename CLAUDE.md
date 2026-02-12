@@ -48,6 +48,7 @@ bash scripts/test_flux1_gguf_lora.sh  # FLUX.1 Dev + LoRA (GGUF Q8_0)
   - `models.py` — Pydantic response models
   - `state.py` — `JobStateStore` (engine event → async WebSocket bridge)
   - `ws.py` — `ConnectionManager` (WebSocket broadcast)
+  - `announce.py` — mDNS/DNS-SD network announcement (`ServiceAnnouncer`)
 - `src/rzem_ai_inference_engine/cli.py` — Click CLI (`generate` + `serve` commands)
 
 ## Key Patterns
@@ -90,6 +91,10 @@ Thread-safe callback registration on `InferenceEngine`. Events: JOB_QUEUED, JOB_
 
 FastAPI app factory in `api/app.py` → `create_app(device, vram_limit_gb, output_dir)`. WebSocket at `/ws` broadcasts all job events as JSON. Threading bridge: engine callbacks fire on processor thread, `JobStateStore` uses `loop.call_soon_threadsafe` to schedule async broadcasts. Images saved as `{job_id}.png` in output_dir, served via `GET /jobs/{id}/image`. `GET /models` and `GET /models/all` use `huggingface_hub.scan_cache_dir()` to list locally cached models.
 
+### Network announcement (mDNS/DNS-SD)
+
+When the server starts with `--host 0.0.0.0` (or any non-localhost address), it registers a `_rzem-ai._tcp.local.` service via multicast DNS so client applications can discover it automatically on the LAN. Uses the `zeroconf` library (RFC 6762 / RFC 6763 — same as Bonjour, Chromecast, etc.). TXT record includes `version`, `device`, `api=rest`, and `ws=/ws`. Disable with `--no-announce`. Binding to `127.0.0.1` (the default) skips announcement with an info log. The `ServiceAnnouncer` in `api/announce.py` handles registration on startup and clean unregistration on shutdown.
+
 ## Common Pitfalls
 
 - **Timestep scaling**: Never pass `sigma * 1000` to FluxTransformer2DModel. It expects [0, 1].
@@ -103,7 +108,7 @@ FastAPI app factory in `api/app.py` → `create_app(device, vram_limit_gb, outpu
 
 ## Dependencies
 
-torch, diffusers (>=0.32), transformers, accelerate, safetensors, huggingface-hub, pydantic, Pillow, click, einops, sentencepiece, loguru, fastapi (>=0.110), uvicorn[standard] (>=0.27), python-multipart. Optional: gguf (for GGUF quantized models). Build system: hatchling.
+torch, diffusers (>=0.32), transformers, accelerate, safetensors, huggingface-hub, pydantic, Pillow, click, einops, sentencepiece, loguru, fastapi (>=0.110), uvicorn[standard] (>=0.27), python-multipart, zeroconf (>=0.131). Optional: gguf (for GGUF quantized models). Build system: hatchling.
 
 ## Testing Status
 
