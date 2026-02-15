@@ -22,7 +22,7 @@ echo "Qwen3:       $QWEN3_MODEL"
 echo "Output:      $OUTPUT"
 echo ""
 
-rzem-ai-inference-engine generate \
+uv run rzem-ai-inference-engine generate \
     --prompt "mountain landscape at sunset, dramatic clouds, warm colors" \
     --transformer-model "$TRANSFORMER" \
     --transformer-type z_image \

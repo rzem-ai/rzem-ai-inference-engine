@@ -13,8 +13,8 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$PROJECT_DIR/scripts/_activate.sh"
 
 # Check PyInstaller
-if ! command -v pyinstaller &> /dev/null; then
-    echo "Error: PyInstaller not found. Install with: pip install pyinstaller"
+if ! uv run python3 -c "import PyInstaller" &> /dev/null; then
+    echo "Error: PyInstaller not found. Install with: uv pip install pyinstaller"
     exit 1
 fi
 
@@ -25,7 +25,7 @@ detect_platform() {
     local has_cuda="false"
 
     # Detect CUDA availability via PyTorch (more accurate than nvidia-smi)
-    has_cuda=$(python3 -c "import torch; print('true' if torch.cuda.is_available() else 'false')" 2>/dev/null || echo "false")
+    has_cuda=$(uv run python3 -c "import torch; print('true' if torch.cuda.is_available() else 'false')" 2>/dev/null || echo "false")
 
     case "$os_type" in
         Linux)
@@ -37,7 +37,7 @@ detect_platform() {
             ;;
         Darwin)
             # macOS - check for MPS (Apple Silicon M1+)
-            local has_mps=$(python3 -c "import torch; print('true' if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() else 'false')" 2>/dev/null || echo "false")
+            local has_mps=$(uv run python3 -c "import torch; print('true' if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() else 'false')" 2>/dev/null || echo "false")
             if [ "$has_mps" = "true" ]; then
                 platform="macOS-MPS"
             else
@@ -78,7 +78,7 @@ build_variant() {
     echo "=========================================="
 
     cd "$PROJECT_DIR"
-    pyinstaller "$spec_file" --clean --noconfirm
+    uv run pyinstaller "$spec_file" --clean --noconfirm
 
     # Check for executable (Unix vs Windows)
     if [ -f "dist/rzem-ai-inference-engine-${variant}/rzem-ai-inference-engine-${variant}" ] || \

@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-Text-to-image inference engine with job queue, event system, and automatic VRAM management. Supports FLUX.1 Dev, FLUX.2 Dev, Z-Image, and Qwen-Image model families. Python package installed via `pip install -e .`.
+Text-to-image inference engine with job queue, event system, and automatic VRAM management. Supports FLUX.1 Dev, FLUX.2 Dev, Z-Image, and Qwen-Image model families. Uses `uv` for dependency management.
 
 ## Quick Reference
 
 ```bash
 # Install
-pip install -e .
+bash install.sh        # or: uv sync
 
 # CLI — generate
 rzem-ai-inference-engine generate --help

@@ -29,7 +29,7 @@ do_start() {
 
     # Pass remaining args (e.g. --port 9000 --device cuda) through to serve
     echo "Starting server... (log: $LOG_FILE)"
-    nohup rzem-ai-inference-engine serve "$@" > "$LOG_FILE" 2>&1 &
+    nohup uv run rzem-ai-inference-engine serve "$@" > "$LOG_FILE" 2>&1 &
     local pid=$!
     echo "$pid" > "$PID_FILE"
 

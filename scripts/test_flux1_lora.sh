@@ -32,7 +32,7 @@ echo "LoRA:        $LORA_PATH (strength=$LORA_STRENGTH)"
 echo "Output:      $OUTPUT_W"
 echo ""
 
-rzem-ai-inference-engine generate \
+uv run rzem-ai-inference-engine generate \
     --prompt "$PROMPT" \
     --transformer-model "$TRANSFORMER" \
     --transformer-type flux1_dev \
@@ -46,7 +46,7 @@ rzem-ai-inference-engine generate \
     --seed 65611195 \
     --output "$OUTPUT_WO"
 
-rzem-ai-inference-engine generate \
+uv run rzem-ai-inference-engine generate \
     --prompt "$PROMPT" \
     --transformer-model "$TRANSFORMER" \
     --transformer-type flux1_dev \

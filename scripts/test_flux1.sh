@@ -17,7 +17,7 @@ echo "Repo:   $TRANSFORMER"
 echo "Output: $OUTPUT"
 echo ""
 
-rzem-ai-inference-engine generate \
+uv run rzem-ai-inference-engine generate \
     --prompt "a cat sitting on a windowsill, golden hour lighting, photorealistic" \
     --transformer-model "$TRANSFORMER" \
     --transformer-type flux1_dev \

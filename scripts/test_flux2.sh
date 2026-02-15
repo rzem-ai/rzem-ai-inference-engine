@@ -20,7 +20,7 @@ echo "Repo:   $TRANSFORMER"
 echo "Output: $OUTPUT"
 echo ""
 
-rzem-ai-inference-engine generate \
+uv run rzem-ai-inference-engine generate \
     --prompt "a serene Japanese garden with cherry blossoms and a koi pond" \
     --transformer-model "$TRANSFORMER" \
     --transformer-type flux2_dev \

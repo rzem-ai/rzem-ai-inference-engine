@@ -4,7 +4,6 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$PROJECT_DIR/scripts/_activate.sh"
 
 echo "Cleaning PyInstaller build artifacts..."
 
