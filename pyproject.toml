@@ -15,6 +15,7 @@ dependencies = [
     "click",
     "einops",
     "sentencepiece",
+    "protobuf",
     "loguru",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
