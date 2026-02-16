@@ -1,0 +1,212 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux-x86_64
+            archive: tar.gz
+          - runner: macos-latest
+            platform: macos-arm64
+            archive: tar.gz
+          - runner: windows-latest
+            platform: windows-x86_64
+            archive: zip
+
+    runs-on: ${{ matrix.runner }}
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      # ── Free disk space (CUDA builds are ~7+ GB) ────────────────
+      - name: Free disk space (Linux)
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
+      - name: Free disk space (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Remove .NET SDK and tool cache to reclaim ~5 GB
+          if (Test-Path "C:\hostedtoolcache") { Remove-Item -Recurse -Force "C:\hostedtoolcache" }
+          if (Test-Path "C:\Program Files\dotnet") { Remove-Item -Recurse -Force "C:\Program Files\dotnet" }
+
+      # ── Setup ───────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      # ── Install dependencies ────────────────────────────────────
+      - name: Install dependencies
+        shell: bash
+        env:
+          # Windows needs explicit CUDA backend; Linux gets it from PyPI automatically
+          UV_TORCH_BACKEND: ${{ runner.os == 'Windows' && 'cu124' || '' }}
+        run: |
+          uv sync
+          uv pip install pyinstaller
+
+      # ── Build both variants ─────────────────────────────────────
+      - name: Build CLI variant
+        shell: bash
+        run: uv run pyinstaller packaging/pyinstaller/rzem-ai-inference-engine-cli.spec --clean --noconfirm
+
+      - name: Build Server variant
+        shell: bash
+        run: uv run pyinstaller packaging/pyinstaller/rzem-ai-inference-engine-server.spec --clean --noconfirm
+
+      # ── Archive ─────────────────────────────────────────────────
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Archive (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          cd dist
+          for variant in rzem-ai-inference-engine-cli rzem-ai-inference-engine-server; do
+            archive="${variant}-${VERSION}-${PLATFORM}.tar.gz"
+            tar -czf "$archive" "$variant"
+            # Split if larger than 1.9 GB (GitHub Release 2 GiB limit)
+            size=$(stat -f%z "$archive" 2>/dev/null || stat -c%s "$archive")
+            if [ "$size" -gt 2040109465 ]; then
+              split -b 1900m "$archive" "${archive}.part-"
+              rm "$archive"
+            fi
+          done
+
+      - name: Archive (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          cd dist
+          foreach ($variant in @("rzem-ai-inference-engine-cli", "rzem-ai-inference-engine-server")) {
+            $archive = "${variant}-${env:VERSION}-${env:PLATFORM}.zip"
+            Compress-Archive -Path $variant -DestinationPath $archive
+            # Split if larger than 1.9 GB
+            $size = (Get-Item $archive).Length
+            if ($size -gt 2040109465) {
+              $bytes = [System.IO.File]::ReadAllBytes($archive)
+              $chunkSize = 1900 * 1024 * 1024
+              $index = 0
+              for ($offset = 0; $offset -lt $bytes.Length; $offset += $chunkSize) {
+                $len = [Math]::Min($chunkSize, $bytes.Length - $offset)
+                $chunk = New-Object byte[] $len
+                [Array]::Copy($bytes, $offset, $chunk, 0, $len)
+                $partName = "${archive}.part-$('{0:D2}' -f $index)"
+                [System.IO.File]::WriteAllBytes("$PWD/$partName", $chunk)
+                $index++
+              }
+              Remove-Item $archive
+            }
+          }
+
+      # ── Upload ──────────────────────────────────────────────────
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.part-*
+            dist/*.zip
+            dist/*.zip.part-*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Create Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts -type f | sort
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Check if any split archives exist
+          SPLIT_NOTE=""
+          if compgen -G "artifacts/*.part-*" > /dev/null 2>&1; then
+            SPLIT_NOTE=$(cat <<'NOTES'
+
+          ---
+
+          ### Reassembling split archives
+
+          Some archives exceed GitHub's 2 GB per-file limit and have been split.
+          To reassemble:
+
+          **Linux/macOS (tar.gz):**
+          ```bash
+          cat rzem-ai-inference-engine-*.tar.gz.part-* > rzem-ai-inference-engine.tar.gz
+          tar -xzf rzem-ai-inference-engine.tar.gz
+          ```
+
+          **Windows (zip):**
+          ```powershell
+          Get-Content rzem-ai-inference-engine-*.zip.part-* -Encoding Byte -ReadCount 0 | Set-Content combined.zip -Encoding Byte
+          Expand-Archive combined.zip
+          ```
+          NOTES
+          )
+          fi
+
+          # Create draft release with all artifacts
+          gh release create "$TAG" \
+            --draft \
+            --generate-notes \
+            --title "Release ${TAG}" \
+            artifacts/*
+
+          # Append split archive instructions if needed
+          if [ -n "$SPLIT_NOTE" ]; then
+            EXISTING_NOTES=$(gh release view "$TAG" --json body -q .body)
+            gh release edit "$TAG" --notes "${EXISTING_NOTES}${SPLIT_NOTE}"
+          fi
+
+          # Publish
+          gh release edit "$TAG" --draft=false

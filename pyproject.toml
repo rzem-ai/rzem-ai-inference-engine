@@ -1,6 +1,6 @@
 [project]
 name = "rzem-ai-inference-engine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Text-to-image inference engine with job queue and VRAM management"
 requires-python = ">=3.10"
 dependencies = [
