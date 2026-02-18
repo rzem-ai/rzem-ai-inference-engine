@@ -17,6 +17,7 @@ class TransformerType(str, Enum):
     FLUX2_DEV = "flux2_dev"
     Z_IMAGE = "z_image"
     QWEN_IMAGE = "qwen_image"
+    FAL_CLOUD = "fal_cloud"
 
 
 class EventType(str, Enum):
@@ -107,6 +108,10 @@ class JobParams(BaseModel):
 
     # LoRAs
     loras: list[LoraParams] = Field(default_factory=list)
+
+    # FAL.ai cloud
+    fal_endpoint: str | None = None
+    fal_api_key: str | None = None
 
 
 @dataclass

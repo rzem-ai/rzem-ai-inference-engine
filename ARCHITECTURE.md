@@ -9,7 +9,7 @@
 
 ## Package Layout
 
-```
+```text
 src/rzem_ai_inference_engine/
 ├── __init__.py              # Public exports
 ├── __main__.py              # python -m rzem_ai_inference_engine
@@ -45,39 +45,39 @@ src/rzem_ai_inference_engine/
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
-│                             REST API (FastAPI)                             │
+│                             REST API (FastAPI)                            │
 │                                                                           │
 │  POST /jobs  GET /jobs  DELETE /jobs/{id}  GET /jobs/{id}/image           │
-│  GET /models  GET /models/all  GET /health  WS /ws                       │
+│  GET /models  GET /models/all  GET /health  WS /ws                        │
 │                                                                           │
 │  ┌─────────────────┐  ┌────────────────────────────────────┐              │
-│  │ JobStateStore    │  │ ConnectionManager (WebSocket)       │              │
-│  │ (event→state)   │──│ broadcasts JSON to all clients      │              │
+│  │ JobStateStore    │  │ ConnectionManager (WebSocket)     │              │
+│  │ (event→state)   │──│ broadcasts JSON to all clients     │              │
 │  └────────┬────────┘  └────────────────────────────────────┘              │
-│           │ loop.call_soon_threadsafe                                      │
+│           │ loop.call_soon_threadsafe                                     │
 │                                                                           │
 │  ┌────────────────────────────────────────────────────────┐               │
-│  │ ServiceAnnouncer (mDNS) — _rzem-ai._tcp.local.        │               │
+│  │ ServiceAnnouncer (mDNS) — _rzem-ai._tcp.local.         │               │
 │  │ register on startup, unregister on shutdown            │               │
 │  └────────────────────────────────────────────────────────┘               │
 ├───────────▼───────────────────────────────────────────────────────────────┤
-│                        InferenceEngine                                     │
+│                        InferenceEngine                                    │
 │                                                                           │
-│  ┌──────────┐  ┌──────────────┐  ┌────────────────────────────┐           │
-│  │ JobQueue  │──│ JobProcessor │──│ Pipeline (flux1/z_image/…) │           │
-│  │          │  │  (bg thread) │  │                            │           │
-│  └──────────┘  └──────────────┘  └─────────────┬──────────────┘           │
+│  ┌──────────┐  ┌──────────────┐  ┌─────────────────────────────┐          │
+│  │ JobQueue │──│ JobProcessor │──│ Pipeline (flux1/z_image/…)  │          │
+│  │          │  │  (bg thread) │  │                             │          │
+│  └──────────┘  └──────────────┘  └─────────────┬───────────────┘          │
 │                                                │                          │
 │                                   ┌────────────▼──────────────┐           │
 │                                   │       ModelCache          │           │
-│                                   │  ┌──────┐  ┌───────────┐ │           │
-│                                   │  │ VRAM │◄─│    RAM     │ │           │
-│                                   │  │ (hot)│  │  (warm)    │ │           │
-│                                   │  └──────┘  └───────────┘ │           │
+│                                   │  ┌──────┐  ┌───────────┐  │           │
+│                                   │  │ VRAM │◄─│    RAM    │  │           │
+│                                   │  │ (hot)│  │  (warm)   │  │           │
+│                                   │  └──────┘  └───────────┘  │           │
 │                                   └───────────────────────────┘           │
 │                                                                           │
 │  ┌──────────────────────────────────────────────────────────┐             │
-│  │  Event System: on()/off()/_emit() with thread-safe cbs  │             │
+│  │  Event System: on()/off()/_emit() with thread-safe cbs   │             │
 │  └──────────────────────────────────────────────────────────┘             │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
@@ -117,12 +117,13 @@ ModelCache.get_or_load(key, loader)
    ┌────▼─────────────────┐
    │ In VRAM? ──► Return  │
    │ In RAM?  ──► Move to │──► ensure_vram() ──► evict smallest unlocked
-   │              VRAM     │
+   │              VRAM    │
    │ Neither? ──► Load    │──► ensure_vram() ──► model.to(device)
    └──────────────────────┘
 ```
 
 Eviction strategy:
+
 1. Sort unlocked VRAM entries by size (ascending)
 2. Move smallest to RAM via `.to("cpu")` + `torch.cuda.empty_cache()` (CUDA only; no-op on MPS/CPU)
 3. Repeat until enough space is available (including 1 GB working buffer)
@@ -173,6 +174,7 @@ Stage 3: Load VAE → lock → decode → unlock
 ```
 
 **Sigma schedule**: Linear sigmas [1.0 → 0.0] with exponential time shift. Mu computed via linear interpolation based on image patch count:
+
 ```
 mu = m * seq_len + b
 m = (1.15 - 0.5) / (4096 - 256)
@@ -223,12 +225,12 @@ b = 0.5 - m * 256
 
 ```
 ┌─────────────────────────┐     ┌─────────────────────────┐
-│         VRAM             │     │          RAM             │
-│   (GPU, fast access)     │     │   (CPU, warm standby)    │
-│                          │     │                          │
+│         VRAM            │     │          RAM            │
+│   (GPU, fast access)    │     │   (CPU, warm standby)   │
+│                         │     │                         │
 │  transformer  22.2 GB 🔒 │────►│  t5_encoder    8.9 GB   │
 │  vae           0.2 GB 🔒 │     │  clip_encoder  0.2 GB   │
-│                          │     │  tokenizers    ~0 GB     │
+│                         │     │  tokenizers    ~0 GB    │
 └─────────────────────────┘     └─────────────────────────┘
          🔒 = locked (in use, cannot be evicted)
 ```
@@ -279,6 +281,7 @@ weight += strength * (alpha / rank) * (up @ down)
 - Applied in-place to model parameters
 
 For model reuse across jobs with different LoRAs, the applicator supports snapshot/restore:
+
 1. `snapshot_weights(model)` — clone all parameters before patching
 2. `unapply(model, snapshot)` — restore original weights after the job
 
@@ -346,12 +349,14 @@ On startup, the server announces itself on the local network via mDNS/DNS-SD (RF
 **Protocol**: Multicast DNS — the same mechanism behind Apple Bonjour, Chromecast, and network printer discovery. The `zeroconf` library handles the low-level multicast.
 
 **Service registration**:
+
 - Service type: `_rzem-ai._tcp.local.`
 - Service name: `RZEM AI Inference Engine._rzem-ai._tcp.local.`
 - TXT record: `version`, `device`, `api=rest`, `ws=/ws`
 - Server hostname: `{hostname}.local.`
 
 **`ServiceAnnouncer` class**:
+
 - `register()` — Resolves the LAN IP (via UDP route lookup when bound to `0.0.0.0`), creates a `ServiceInfo`, and registers it with a `Zeroconf` instance. Skips gracefully when bound to `127.0.0.1` or when the `zeroconf` package is missing.
 - `unregister()` — Removes the service record and closes the `Zeroconf` instance.
 
@@ -368,6 +373,7 @@ On startup, the server announces itself on the local network via mDNS/DNS-SD (RF
 `JobQueue` is a thread-safe FIFO backed by `collections.deque`. It uses `threading.Event` for efficient blocking (`get_next` blocks until a job is available or timeout expires).
 
 `JobProcessor` runs a simple loop in a daemon thread:
+
 1. `queue.get_next(timeout=0.5)` — blocks briefly, returns `None` on timeout
 2. Look up the pipeline for `params.transformer_type`
 3. `pipeline.validate_params()` — fail fast on missing fields

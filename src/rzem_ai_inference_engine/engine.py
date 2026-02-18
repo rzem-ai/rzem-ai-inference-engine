@@ -68,6 +68,14 @@ class InferenceEngine:
             TransformerType.QWEN_IMAGE: QwenImagePipeline(),
         }
 
+        # Register FAL cloud pipeline if fal-client is installed
+        try:
+            from rzem_ai_inference_engine.pipeline.fal import FalPipeline
+            self._pipelines[TransformerType.FAL_CLOUD] = FalPipeline()
+            logger.info("FAL cloud pipeline registered")
+        except ImportError:
+            logger.debug("fal-client not installed, FAL cloud pipeline unavailable")
+
         # Job queue
         self._queue = JobQueue(emit=self._emit)
 
