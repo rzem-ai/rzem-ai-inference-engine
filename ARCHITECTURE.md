@@ -29,7 +29,8 @@ src/rzem_ai_inference_engine/
 │   ├── flux1.py             # FLUX.1 Dev
 │   ├── flux2.py             # FLUX.2 Dev
 │   ├── z_image.py           # Z-Image
-│   └── qwen_image.py        # Qwen-Image
+│   ├── qwen_image.py        # Qwen-Image
+│   └── fal.py               # FAL.ai cloud (remote endpoints)
 ├── models/
 │   ├── cache.py             # ModelCache (two-tier VRAM/RAM)
 │   ├── loader.py            # ModelLoader (path resolution)
@@ -218,6 +219,20 @@ b = 0.5 - m * 256
 **Denoising**: True classifier-free guidance with negative prompts — two forward passes per step. `noise_pred = noise_pred_neg + cfg_scale * (noise_pred_pos - noise_pred_neg)`.
 
 **Defaults**: 50 steps, cfg_scale=4.0. Supports specific resolutions (1328x1328, 1664x928, etc.).
+
+### FAL.ai Cloud (`fal.py`)
+
+**Architecture**: No local models — all inference is delegated to FAL.ai cloud endpoints via `fal_client.run()`.
+
+**Authentication**: `fal_api_key` is set as `os.environ["FAL_KEY"]` before each call. Both `fal_api_key` and `fal_endpoint` are required in `JobParams`.
+
+**Supported endpoints**: Any FAL.ai image generation endpoint (e.g. `fal-ai/flux/dev`, `fal-ai/flux-pro/v1.1`, `fal-ai/flux-2`, `fal-ai/flux-2-flex`, `fal-ai/flux-2-pro`).
+
+**Arguments mapping**: `prompt`, `image_size`, `seed` are always sent. `guidance_scale` is added for non-schnell endpoints. `num_inference_steps` is added when `steps > 0`.
+
+**Result handling**: FAL returns an image URL in `result["images"][0]["url"]`. The pipeline downloads it via `httpx.get()` and converts to a PIL Image.
+
+**Key difference from local pipelines**: `get_required_models()` returns an empty list — no models are loaded into the cache. Progress callbacks emit start/end events only (FAL provides no intermediate progress).
 
 ## Model Cache (`cache.py`)
 
