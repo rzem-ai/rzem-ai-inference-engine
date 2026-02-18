@@ -10,13 +10,16 @@ A Python text-to-image inference engine with job queue, event callbacks, and aut
 | **FLUX.2 Dev** | `Flux2Transformer2DModel` | Qwen3 (multi-layer) | 32-ch AutoencoderKL + BN | 20 |
 | **Z-Image** | `ZImageTransformer2DModel` (S3-DiT) | Qwen3-4B | 16-ch AutoencoderKL | 9 |
 | **Qwen-Image** | `QwenImageTransformer2DModel` (20B MMDiT) | Qwen3 | 16-ch AutoencoderKL | 50 |
+| **FAL.ai Cloud** | Remote (fal-ai endpoints) | N/A | N/A | Endpoint-dependent |
 
-All models support LoRA weight patching with automatic format detection (Kohya, Diffusers/PEFT, XLabs, AIToolkit, OneTrainer).
+All local models support LoRA weight patching with automatic format detection (Kohya, Diffusers/PEFT, XLabs, AIToolkit, OneTrainer).
+
+FAL.ai cloud generation delegates to remote endpoints (e.g. `fal-ai/flux/dev`, `fal-ai/flux-pro/v1.1`, `fal-ai/flux-2`) — no local models are loaded.
 
 ## Installation
 
 ```bash
-pip install -e .
+uv sync    # or: pip install -e .
 ```
 
 Requires Python 3.10+ and PyTorch 2.0+. GPU with 24+ GB VRAM recommended. Apple Silicon M3+ with PyTorch 2.3+ is supported (MPS backend).
@@ -236,9 +239,10 @@ bash scripts/test_flux1_gguf_lora.sh  # FLUX.1 Dev + LoRA (GGUF Q8_0)
 ## Dependencies
 
 - **PyTorch** >= 2.0 (CUDA recommended, MPS supported on M3+ with PyTorch 2.3+)
-- **diffusers** >= 0.36
+- **diffusers** >= 0.32
 - **transformers** >= 4.40
 - accelerate, safetensors, huggingface-hub
 - pydantic >= 2.0, Pillow, click, einops, sentencepiece, loguru
+- **fal-client** >= 0.5, httpx (FAL.ai cloud generation)
 - **zeroconf** >= 0.131 (mDNS network announcement)
 - fastapi >= 0.110, uvicorn[standard] >= 0.27 (REST API server)
