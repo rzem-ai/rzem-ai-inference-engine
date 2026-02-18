@@ -21,16 +21,14 @@ dependencies = [
     "uvicorn[standard]>=0.27",
     "python-multipart",
     "zeroconf>=0.131",
+    "fal-client>=0.5",
+    "httpx",
 ]
 
 [project.scripts]
 rzem-ai-inference-engine = "rzem_ai_inference_engine.cli:main"
 
 [project.optional-dependencies]
-fal = [
-    "fal-client>=0.5",
-    "httpx",
-]
 build = [
     "pyinstaller>=5.0",
 ]
