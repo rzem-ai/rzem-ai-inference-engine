@@ -18,6 +18,31 @@ if TYPE_CHECKING:
     from rzem_ai_inference_engine.models.cache import ModelCache
     from rzem_ai_inference_engine.types import JobParams, PreviewConfig
 
+# Endpoints that use `aspect_ratio` (string) instead of `image_size` (object)
+_ASPECT_RATIO_ENDPOINTS = frozenset({
+    "fal-ai/nano-banana",
+})
+
+# Supported aspect ratios for aspect_ratio-style endpoints
+_SUPPORTED_RATIOS = [
+    (21, 9), (16, 9), (3, 2), (4, 3), (5, 4),
+    (1, 1),
+    (4, 5), (3, 4), (2, 3), (9, 16),
+]
+
+
+def _closest_aspect_ratio(width: int, height: int) -> str:
+    """Map a width×height to the closest supported aspect ratio string."""
+    target = width / height
+    best_ratio = "1:1"
+    best_diff = float("inf")
+    for w, h in _SUPPORTED_RATIOS:
+        diff = abs(target - w / h)
+        if diff < best_diff:
+            best_diff = diff
+            best_ratio = f"{w}:{h}"
+    return best_ratio
+
 
 class FalPipeline(BasePipeline):
     """Pipeline that calls FAL.ai cloud endpoints for image generation.
@@ -49,16 +74,23 @@ class FalPipeline(BasePipeline):
         os.environ["FAL_KEY"] = params.fal_api_key
 
         seed = params.seed if params.seed >= 0 else random.randint(0, 2**31 - 1)
+        endpoint = params.fal_endpoint
 
-        # Build arguments common to all endpoints
+        # Build arguments — image size format varies by endpoint
         arguments: dict = {
             "prompt": params.prompt,
-            "image_size": {"width": params.width, "height": params.height},
             "seed": seed,
         }
 
+        if endpoint in _ASPECT_RATIO_ENDPOINTS:
+            arguments["aspect_ratio"] = _closest_aspect_ratio(params.width, params.height)
+        else:
+            arguments["image_size"] = {
+                "width": int(params.width),
+                "height": int(params.height),
+            }
+
         # Map params to endpoint-specific argument names
-        endpoint = params.fal_endpoint
         if "schnell" not in endpoint:
             arguments["guidance_scale"] = params.cfg_scale
         if params.steps > 0:
@@ -71,7 +103,7 @@ class FalPipeline(BasePipeline):
             total_steps=params.steps,
         ))
 
-        logger.info("Calling FAL endpoint: {} with seed={}", endpoint, seed)
+        logger.info("Calling FAL endpoint: {} with arguments: {}", endpoint, arguments)
         result = fal_client.run(endpoint, arguments=arguments)
 
         # Download the generated image
