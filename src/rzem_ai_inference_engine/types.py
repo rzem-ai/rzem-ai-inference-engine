@@ -112,6 +112,7 @@ class JobParams(BaseModel):
     # FAL.ai cloud
     fal_endpoint: str | None = None
     fal_api_key: str | None = None
+    fal_aspectratio: list[str] | None = None
 
 
 @dataclass

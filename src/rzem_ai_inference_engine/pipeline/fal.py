@@ -18,29 +18,51 @@ if TYPE_CHECKING:
     from rzem_ai_inference_engine.models.cache import ModelCache
     from rzem_ai_inference_engine.types import JobParams, PreviewConfig
 
-# Endpoints that use `aspect_ratio` (string) instead of `image_size` (object)
-_ASPECT_RATIO_ENDPOINTS = frozenset({
-    "fal-ai/nano-banana",
-})
 
-# Supported aspect ratios for aspect_ratio-style endpoints
-_SUPPORTED_RATIOS = [
-    (21, 9), (16, 9), (3, 2), (4, 3), (5, 4),
-    (1, 1),
-    (4, 5), (3, 4), (2, 3), (9, 16),
-]
+# Named aspect ratio strings used by some FAL endpoints (e.g. fal-ai/flux-2-pro)
+# mapped to their numeric W/H equivalents for closest-match comparison.
+_NAMED_RATIO_VALUES: dict[str, tuple[int, int]] = {
+    "square_hd":      (1, 1),
+    "square":         (1, 1),
+    "portrait_4_3":   (3, 4),
+    "portrait_16_9":  (9, 16),
+    "landscape_4_3":  (4, 3),
+    "landscape_16_9": (16, 9),
+}
 
 
-def _closest_aspect_ratio(width: int, height: int) -> str:
-    """Map a width×height to the closest supported aspect ratio string."""
+def _ratio_value(ratio_str: str) -> tuple[int, int]:
+    """Return the (w, h) numeric pair for a ratio string.
+
+    Accepts both colon format ("16:9") and FAL named format ("landscape_16_9").
+    """
+    if ratio_str in _NAMED_RATIO_VALUES:
+        return _NAMED_RATIO_VALUES[ratio_str]
+    w_str, h_str = ratio_str.split(":")
+    return int(w_str), int(h_str)
+
+
+def _closest_aspect_ratio(width: int, height: int, supported: list[str]) -> str:
+    """Map a width×height to the closest ratio string from the supported list.
+
+    Args:
+        width: Image width in pixels.
+        height: Image height in pixels.
+        supported: List of ratio strings — either colon format ("16:9") or
+                   FAL named format ("landscape_16_9"). Both are accepted.
+
+    Returns:
+        The closest matching ratio string from the supported list.
+    """
     target = width / height
-    best_ratio = "1:1"
+    best_ratio = supported[0]
     best_diff = float("inf")
-    for w, h in _SUPPORTED_RATIOS:
+    for ratio_str in supported:
+        w, h = _ratio_value(ratio_str)
         diff = abs(target - w / h)
         if diff < best_diff:
             best_diff = diff
-            best_ratio = f"{w}:{h}"
+            best_ratio = ratio_str
     return best_ratio
 
 
@@ -82,8 +104,8 @@ class FalPipeline(BasePipeline):
             "seed": seed,
         }
 
-        if endpoint in _ASPECT_RATIO_ENDPOINTS:
-            arguments["aspect_ratio"] = _closest_aspect_ratio(params.width, params.height)
+        if params.fal_aspectratio:
+            arguments["aspect_ratio"] = _closest_aspect_ratio(params.width, params.height, params.fal_aspectratio)
         else:
             arguments["image_size"] = {
                 "width": int(params.width),
@@ -91,7 +113,7 @@ class FalPipeline(BasePipeline):
             }
 
         # Map params to endpoint-specific argument names
-        if "schnell" not in endpoint:
+        if params.cfg_scale > 0:
             arguments["guidance_scale"] = params.cfg_scale
         if params.steps > 0:
             arguments["num_inference_steps"] = params.steps
