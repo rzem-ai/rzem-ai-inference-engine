@@ -106,6 +106,7 @@ class FalPipeline(BasePipeline):
 
         if params.fal_aspectratio:
             arguments["aspect_ratio"] = _closest_aspect_ratio(params.width, params.height, params.fal_aspectratio)
+            arguments["image_size"] = _closest_aspect_ratio(params.width, params.height, params.fal_aspectratio)
         else:
             arguments["image_size"] = {
                 "width": int(params.width),
