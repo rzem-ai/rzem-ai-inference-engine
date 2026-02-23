@@ -81,14 +81,14 @@ class ModelLoader:
             # Specific file from a repo
             from huggingface_hub import hf_hub_download
 
-            logger.info(f"Downloading file from HuggingFace Hub: {repo_id}/{filename}")
+            logger.info(f"Loading file from HuggingFace Hub: {repo_id}/{filename}")
             cached = hf_hub_download(repo_id=repo_id, filename=filename)
             return Path(cached)
 
         # Full repo download
         from huggingface_hub import snapshot_download
 
-        logger.info(f"Downloading repo from HuggingFace Hub: {repo_id}")
+        logger.info(f"Loading repo from HuggingFace Hub: {repo_id}")
         cached = snapshot_download(
             repo_id=repo_id,
             allow_patterns=[
