@@ -87,63 +87,66 @@ class QwenImagePipeline(BasePipeline):
                     return sub
             return path
 
-        qwen3_tok = cache.get_or_load(
-            _cache_key(params.qwen3_tokenizer, "qwen3_tokenizer"),
-            lambda: AutoTokenizer.from_pretrained(
-                _resolve_sub(params.qwen3_tokenizer, "tokenizer"),
-            ),
-        )
-        qwen3_enc = cache.get_or_load(
-            _cache_key(params.qwen3_encoder, "qwen3_encoder"),
-            lambda: AutoModelForCausalLM.from_pretrained(
-                _resolve_sub(params.qwen3_encoder, "text_encoder"),
-                torch_dtype=dtype,
-            ),
-        )
-
-        # ── Load Qwen-Image Transformer ──────────────────────────────
-        def _load_transformer():
-            from diffusers.models import QwenImageTransformer2DModel
-            path = ModelLoader.resolve_path(params.transformer_model)
-            if path.is_file():
-                return QwenImageTransformer2DModel.from_single_file(str(path), torch_dtype=dtype)
-            sub = path / "transformer"
-            if sub.exists():
-                path = sub
-            return QwenImageTransformer2DModel.from_pretrained(str(path), torch_dtype=dtype)
-
-        transformer = cache.get_or_load(
-            _cache_key(params.transformer_model, "transformer"),
-            _load_transformer,
-        )
-
-        # ── Load VAE (FLUX-derived, 16 channels) ────────────────────
-        def _load_vae():
-            from diffusers import AutoencoderKL
-            path = ModelLoader.resolve_path(params.vae_model)
-            if path.is_file():
-                return AutoencoderKL.from_single_file(str(path), torch_dtype=dtype)
-            sub = path / "vae"
-            if sub.exists():
-                path = sub
-            return AutoencoderKL.from_pretrained(str(path), torch_dtype=dtype)
-
-        vae = cache.get_or_load(
-            _cache_key(params.vae_model, "vae"),
-            _load_vae,
-        )
-
-        # Lock models
-        keys = [
-            _cache_key(params.qwen3_tokenizer, "qwen3_tokenizer"),
-            _cache_key(params.qwen3_encoder, "qwen3_encoder"),
-            _cache_key(params.transformer_model, "transformer"),
-            _cache_key(params.vae_model, "vae"),
-        ]
-        for k in keys:
-            cache.lock(k)
-
+        # Lock each model immediately after loading to prevent eviction
+        # during subsequent loads (earlier models could be evicted to make
+        # room for later ones, leaving stale CPU references).
+        keys = []
         try:
+            qwen3_tok = cache.get_or_load(
+                _cache_key(params.qwen3_tokenizer, "qwen3_tokenizer"),
+                lambda: AutoTokenizer.from_pretrained(
+                    _resolve_sub(params.qwen3_tokenizer, "tokenizer"),
+                ),
+            )
+            keys.append(_cache_key(params.qwen3_tokenizer, "qwen3_tokenizer"))
+            cache.lock(keys[-1])
+
+            qwen3_enc = cache.get_or_load(
+                _cache_key(params.qwen3_encoder, "qwen3_encoder"),
+                lambda: AutoModelForCausalLM.from_pretrained(
+                    _resolve_sub(params.qwen3_encoder, "text_encoder"),
+                    torch_dtype=dtype,
+                ),
+            )
+            keys.append(_cache_key(params.qwen3_encoder, "qwen3_encoder"))
+            cache.lock(keys[-1])
+
+            # ── Load Qwen-Image Transformer ──────────────────────────
+            def _load_transformer():
+                from diffusers.models import QwenImageTransformer2DModel
+                path = ModelLoader.resolve_path(params.transformer_model)
+                if path.is_file():
+                    return QwenImageTransformer2DModel.from_single_file(str(path), torch_dtype=dtype)
+                sub = path / "transformer"
+                if sub.exists():
+                    path = sub
+                return QwenImageTransformer2DModel.from_pretrained(str(path), torch_dtype=dtype)
+
+            transformer = cache.get_or_load(
+                _cache_key(params.transformer_model, "transformer"),
+                _load_transformer,
+            )
+            keys.append(_cache_key(params.transformer_model, "transformer"))
+            cache.lock(keys[-1])
+
+            # ── Load VAE (FLUX-derived, 16 channels) ────────────────
+            def _load_vae():
+                from diffusers import AutoencoderKL
+                path = ModelLoader.resolve_path(params.vae_model)
+                if path.is_file():
+                    return AutoencoderKL.from_single_file(str(path), torch_dtype=dtype)
+                sub = path / "vae"
+                if sub.exists():
+                    path = sub
+                return AutoencoderKL.from_pretrained(str(path), torch_dtype=dtype)
+
+            vae = cache.get_or_load(
+                _cache_key(params.vae_model, "vae"),
+                _load_vae,
+            )
+            keys.append(_cache_key(params.vae_model, "vae"))
+            cache.lock(keys[-1])
+
             lora_hooks = []
             if params.loras:
                 lora_specs = [(lp.model_file, lp.strength) for lp in params.loras]
