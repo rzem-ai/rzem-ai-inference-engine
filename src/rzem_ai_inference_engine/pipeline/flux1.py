@@ -59,7 +59,9 @@ class Flux1DevPipeline(BasePipeline):
 
     def get_required_models(self, params: JobParams) -> list[ModelSpec]:
         return [
+            ModelSpec(key=_cache_key(params.clip_tokenizer, "clip_tokenizer"), loader=lambda: None, estimated_size_bytes=0),
             ModelSpec(key=_cache_key(params.clip_encoder, "clip_encoder"), loader=lambda: None, estimated_size_bytes=500_000_000),
+            ModelSpec(key=_cache_key(params.t5_tokenizer, "t5_tokenizer"), loader=lambda: None, estimated_size_bytes=0),
             ModelSpec(key=_cache_key(params.t5_encoder, "t5_encoder"), loader=lambda: None, estimated_size_bytes=10_000_000_000),
             ModelSpec(key=_cache_key(params.transformer_model, "transformer"), loader=lambda: None, estimated_size_bytes=23_000_000_000),
             ModelSpec(key=_cache_key(params.vae_model, "vae"), loader=lambda: None, estimated_size_bytes=200_000_000),

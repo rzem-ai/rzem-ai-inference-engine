@@ -63,6 +63,11 @@ class JobProcessor:
                 # Validate params for this pipeline
                 pipeline.validate_params(params)
 
+                # Pre-evict VRAM models not needed by this pipeline
+                required = pipeline.get_required_models(params)
+                keep_keys = {spec.key for spec in required}
+                self._cache.evict_except(keep_keys)
+
                 self._emit(EventType.JOB_STARTED, StartedEvent(job_id=job_id))
 
                 # Build progress callback

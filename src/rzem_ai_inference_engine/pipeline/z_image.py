@@ -50,7 +50,8 @@ class ZImagePipeline(BasePipeline):
 
     def get_required_models(self, params: JobParams) -> list[ModelSpec]:
         return [
-            ModelSpec(key=_cache_key(params.qwen3_encoder, "qwen3"), loader=lambda: None, estimated_size_bytes=8_000_000_000),
+            ModelSpec(key=_cache_key(params.qwen3_tokenizer, "qwen3_tokenizer"), loader=lambda: None, estimated_size_bytes=0),
+            ModelSpec(key=_cache_key(params.qwen3_encoder, "qwen3_encoder"), loader=lambda: None, estimated_size_bytes=8_000_000_000),
             ModelSpec(key=_cache_key(params.transformer_model, "transformer"), loader=lambda: None, estimated_size_bytes=12_000_000_000),
             ModelSpec(key=_cache_key(params.vae_model, "vae"), loader=lambda: None, estimated_size_bytes=200_000_000),
         ]

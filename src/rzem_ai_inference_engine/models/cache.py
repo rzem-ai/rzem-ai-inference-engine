@@ -169,6 +169,21 @@ class ModelCache:
             self._vram.clear()
             self._ram.clear()
 
+    def evict_except(self, keep_keys: set[str]) -> None:
+        """Evict all unlocked VRAM entries whose key is NOT in *keep_keys*.
+
+        Used before a pipeline run to proactively free VRAM occupied by
+        models from a different pipeline (e.g. T5 encoder left over from
+        FLUX when switching to Z-Image).
+        """
+        with self._lock:
+            victims = [
+                e for e in self._vram.values()
+                if e.key not in keep_keys and not e.is_locked
+            ]
+            for victim in victims:
+                self._evict_to_ram(victim)
+
     @property
     def vram_used(self) -> int:
         """Total bytes used by models on the GPU."""

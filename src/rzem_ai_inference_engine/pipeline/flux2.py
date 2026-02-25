@@ -67,8 +67,8 @@ class Flux2DevPipeline(BasePipeline):
             raise ValueError(f"FLUX.2 Dev requires text encoder params: {', '.join(missing)}")
 
     def get_required_models(self, params: JobParams) -> list[ModelSpec]:
+        # Text encoder is loaded/discarded outside the cache, so not listed here.
         return [
-            ModelSpec(key=_cache_key(params.qwen3_encoder, "text_encoder"), loader=lambda: None, estimated_size_bytes=45_000_000_000),
             ModelSpec(key=_cache_key(params.transformer_model, "transformer"), loader=lambda: None, estimated_size_bytes=23_000_000_000),
             ModelSpec(key=_cache_key(params.vae_model, "vae"), loader=lambda: None, estimated_size_bytes=200_000_000),
         ]
