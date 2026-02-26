@@ -29,6 +29,9 @@ dependencies = [
 rzem-ai-inference-engine = "rzem_ai_inference_engine.cli:main"
 
 [project.optional-dependencies]
+bnb = [
+    "bitsandbytes>=0.43",
+]
 build = [
     "pyinstaller>=5.0",
 ]

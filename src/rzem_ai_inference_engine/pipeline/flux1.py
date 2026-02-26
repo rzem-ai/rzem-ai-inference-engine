@@ -35,6 +35,21 @@ def _resolve_sub(path_or_repo: str, subfolder: str):
     return path
 
 
+def _resolve_t5_quantization(config) -> tuple[str, int]:
+    """Return (cache_key_suffix, estimated_size_bytes) based on T5 quantization config."""
+    if config is None:
+        return "", 10_000_000_000
+    try:
+        resolved = ModelLoader.resolve_config(config, "t5_encoder")
+        if resolved and resolved.get("load_in_4bit"):
+            return ":4bit", 2_500_000_000
+        if resolved and resolved.get("load_in_8bit"):
+            return ":8bit", 5_000_000_000
+    except Exception:
+        pass
+    return "", 10_000_000_000
+
+
 class Flux1DevPipeline(BasePipeline):
     """Full FLUX.1 Dev inference: CLIP + T5 text encoding, rectified flow Euler denoising, VAE decode.
 
@@ -58,11 +73,12 @@ class Flux1DevPipeline(BasePipeline):
             )
 
     def get_required_models(self, params: JobParams) -> list[ModelSpec]:
+        t5_suffix, t5_size = _resolve_t5_quantization(params.t5_encoder_config)
         return [
             ModelSpec(key=_cache_key(params.clip_tokenizer, "clip_tokenizer"), loader=lambda: None, estimated_size_bytes=0),
             ModelSpec(key=_cache_key(params.clip_encoder, "clip_encoder"), loader=lambda: None, estimated_size_bytes=500_000_000),
             ModelSpec(key=_cache_key(params.t5_tokenizer, "t5_tokenizer"), loader=lambda: None, estimated_size_bytes=0),
-            ModelSpec(key=_cache_key(params.t5_encoder, "t5_encoder"), loader=lambda: None, estimated_size_bytes=10_000_000_000),
+            ModelSpec(key=_cache_key(params.t5_encoder, "t5_encoder") + t5_suffix, loader=lambda: None, estimated_size_bytes=t5_size),
             ModelSpec(key=_cache_key(params.transformer_model, "transformer"), loader=lambda: None, estimated_size_bytes=23_000_000_000),
             ModelSpec(key=_cache_key(params.vae_model, "vae"), loader=lambda: None, estimated_size_bytes=200_000_000),
         ]
@@ -117,12 +133,28 @@ class Flux1DevPipeline(BasePipeline):
                 _resolve_sub(params.t5_tokenizer, "tokenizer_2"),
             ),
         )
+        t5_suffix, _ = _resolve_t5_quantization(params.t5_encoder_config)
+
+        def _load_t5():
+            path = _resolve_sub(params.t5_encoder, "text_encoder_2")
+            load_kwargs: dict = {"torch_dtype": dtype}
+            t5_config = ModelLoader.resolve_config(params.t5_encoder_config, "t5_encoder")
+            if t5_config and (t5_config.get("load_in_4bit") or t5_config.get("load_in_8bit")):
+                from transformers import BitsAndBytesConfig
+
+                bnb_kwargs = dict(t5_config)
+                for key in ("bnb_4bit_compute_dtype", "bnb_8bit_compute_dtype"):
+                    if key in bnb_kwargs and isinstance(bnb_kwargs[key], str):
+                        bnb_kwargs[key] = getattr(torch, bnb_kwargs[key])
+                if t5_config.get("load_in_4bit") and "bnb_4bit_compute_dtype" not in bnb_kwargs:
+                    bnb_kwargs["bnb_4bit_compute_dtype"] = dtype
+                load_kwargs["quantization_config"] = BitsAndBytesConfig(**bnb_kwargs)
+                logger.info("Loading T5 encoder with BitsAndBytes quantization")
+            return T5EncoderModel.from_pretrained(path, **load_kwargs)
+
         t5_enc = cache.get_or_load(
-            _cache_key(params.t5_encoder, "t5_encoder"),
-            lambda: T5EncoderModel.from_pretrained(
-                _resolve_sub(params.t5_encoder, "text_encoder_2"),
-                torch_dtype=dtype,
-            ),
+            _cache_key(params.t5_encoder, "t5_encoder") + t5_suffix,
+            _load_t5,
         )
 
         t5_inputs = t5_tok(
