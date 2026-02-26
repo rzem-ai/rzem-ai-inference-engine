@@ -11,6 +11,7 @@ from loguru import logger
 from rzem_ai_inference_engine.models.cache import ModelCache
 from rzem_ai_inference_engine.models.memory import detect_device
 from rzem_ai_inference_engine.pipeline.flux1 import Flux1DevPipeline
+from rzem_ai_inference_engine.pipeline.flux1_kontext import Flux1KontextPipeline
 from rzem_ai_inference_engine.pipeline.flux2 import Flux2DevPipeline
 from rzem_ai_inference_engine.pipeline.qwen_image import QwenImagePipeline
 from rzem_ai_inference_engine.pipeline.z_image import ZImagePipeline
@@ -63,6 +64,7 @@ class InferenceEngine:
         # Pipelines
         self._pipelines: dict[TransformerType, Any] = {
             TransformerType.FLUX1_DEV: Flux1DevPipeline(),
+            TransformerType.FLUX1_KONTEXT: Flux1KontextPipeline(),
             TransformerType.FLUX2_DEV: Flux2DevPipeline(),
             TransformerType.Z_IMAGE: ZImagePipeline(),
             TransformerType.QWEN_IMAGE: QwenImagePipeline(),
