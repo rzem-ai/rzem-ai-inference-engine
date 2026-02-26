@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 class TransformerType(str, Enum):
     FLUX1_DEV = "flux1_dev"
+    FLUX1_KONTEXT = "flux1_kontext"
     FLUX2_DEV = "flux2_dev"
     Z_IMAGE = "z_image"
     QWEN_IMAGE = "qwen_image"
@@ -69,6 +70,7 @@ class LoraParams(BaseModel):
 
 class JobParams(BaseModel):
     prompt: str
+    input_image_path: str | None = None
     steps: int = 20
     cfg_scale: float = 1.0
     width: int = 1024
