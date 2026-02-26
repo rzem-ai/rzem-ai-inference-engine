@@ -81,7 +81,7 @@ class QwenImagePipeline(BasePipeline):
 
         # ── Load Qwen3 tokenizer + encoder ───────────────────────────
         def _resolve_sub(path_or_repo: str, subfolder: str):
-            path = ModelLoader.resolve_path(path_or_repo)
+            path = ModelLoader.resolve_path(path_or_repo, subfolder=subfolder)
             if path.is_dir():
                 sub = path / subfolder
                 if sub.exists():
@@ -115,7 +115,7 @@ class QwenImagePipeline(BasePipeline):
             # ── Load Qwen-Image Transformer ──────────────────────────
             def _load_transformer():
                 from diffusers.models import QwenImageTransformer2DModel
-                path = ModelLoader.resolve_path(params.transformer_model)
+                path = ModelLoader.resolve_path(params.transformer_model, subfolder="transformer")
                 if path.is_file():
                     return QwenImageTransformer2DModel.from_single_file(str(path), torch_dtype=dtype)
                 sub = path / "transformer"
@@ -133,7 +133,7 @@ class QwenImagePipeline(BasePipeline):
             # ── Load VAE (FLUX-derived, 16 channels) ────────────────
             def _load_vae():
                 from diffusers import AutoencoderKL
-                path = ModelLoader.resolve_path(params.vae_model)
+                path = ModelLoader.resolve_path(params.vae_model, subfolder="vae")
                 if path.is_file():
                     return AutoencoderKL.from_single_file(str(path), torch_dtype=dtype)
                 sub = path / "vae"

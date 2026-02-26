@@ -26,8 +26,12 @@ def _cache_key(path: str, role: str) -> str:
 
 
 def _resolve_sub(path_or_repo: str, subfolder: str):
-    """Resolve a path, checking for a component subfolder in directories."""
-    path = ModelLoader.resolve_path(path_or_repo)
+    """Resolve a path, checking for a component subfolder in directories.
+
+    Passes the subfolder hint to the loader so that ``snapshot_download``
+    only fetches files for this component instead of the entire repo.
+    """
+    path = ModelLoader.resolve_path(path_or_repo, subfolder=subfolder)
     if path.is_dir():
         sub = path / subfolder
         if sub.exists():
@@ -171,7 +175,7 @@ class Flux1DevPipeline(BasePipeline):
         # ── Stage 2: Denoising ────────────────────────────────────────
 
         def _load_transformer():
-            path = ModelLoader.resolve_path(params.transformer_model)
+            path = ModelLoader.resolve_path(params.transformer_model, subfolder="transformer")
             if path.is_file():
                 kwargs = {"torch_dtype": dtype}
                 config = ModelLoader.resolve_config(params.transformer_config, "flux_transformer")
@@ -197,7 +201,7 @@ class Flux1DevPipeline(BasePipeline):
         want_previews = preview_config is not None and preview_config.enabled
         if want_previews:
             def _load_vae():
-                path = ModelLoader.resolve_path(params.vae_model)
+                path = ModelLoader.resolve_path(params.vae_model, subfolder="vae")
                 if path.is_file():
                     config = ModelLoader.resolve_config(params.vae_config, "vae")
                     if config:
@@ -245,7 +249,7 @@ class Flux1DevPipeline(BasePipeline):
         # If VAE was pre-loaded for previews, cache.get_or_load is a cache hit.
 
         def _load_vae():
-            path = ModelLoader.resolve_path(params.vae_model)
+            path = ModelLoader.resolve_path(params.vae_model, subfolder="vae")
             if path.is_file():
                 config = ModelLoader.resolve_config(params.vae_config, "vae")
                 if config:
@@ -436,16 +440,22 @@ class Flux1DevPipeline(BasePipeline):
         return latents
 
     @staticmethod
-    def _generate_image_ids(h: int, w: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    def _generate_image_ids(
+        h: int, w: int,
+        device: torch.device, dtype: torch.dtype,
+        idx_offset: int = 0,
+    ) -> torch.Tensor:
         """Generate positional IDs for the image patches.
 
-        Returns tensor of shape (h*w, 3) where columns are (batch_id=0, y, x).
+        Returns tensor of shape (h*w, 3) where columns are (idx_offset, y, x).
+        The idx_offset distinguishes noise tokens (0) from reference image tokens (1)
+        in Kontext-style conditioning.
         """
         y = torch.arange(h, device=device, dtype=dtype)
         x = torch.arange(w, device=device, dtype=dtype)
         grid_y, grid_x = torch.meshgrid(y, x, indexing="ij")
         ids = torch.stack([
-            torch.zeros_like(grid_y),  # batch dimension (always 0)
+            torch.full_like(grid_y, idx_offset),
             grid_y,
             grid_x,
         ], dim=-1)

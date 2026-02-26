@@ -39,7 +39,7 @@ def _cache_key(path: str, role: str) -> str:
 
 def _resolve_sub(path_or_repo: str, subfolder: str):
     """Resolve a path, checking for a component subfolder in directories."""
-    path = ModelLoader.resolve_path(path_or_repo)
+    path = ModelLoader.resolve_path(path_or_repo, subfolder=subfolder)
     if path.is_dir():
         sub = path / subfolder
         if sub.exists():
@@ -132,7 +132,7 @@ class Flux2DevPipeline(BasePipeline):
         # ── Stage 2: Denoising ────────────────────────────────────────
         def _load_transformer():
             from diffusers.models import Flux2Transformer2DModel
-            path = ModelLoader.resolve_path(params.transformer_model)
+            path = ModelLoader.resolve_path(params.transformer_model, subfolder="transformer")
             if path.is_file():
                 kwargs = {"torch_dtype": dtype}
                 config = ModelLoader.resolve_config(params.transformer_config, "flux2_transformer")
@@ -180,7 +180,7 @@ class Flux2DevPipeline(BasePipeline):
 
         # ── Stage 3: BN denorm + unpatchify + VAE decode ──────────────
         def _load_vae():
-            path = ModelLoader.resolve_path(params.vae_model)
+            path = ModelLoader.resolve_path(params.vae_model, subfolder="vae")
             # Try Flux2 VAE (has BatchNorm) first
             try:
                 from diffusers import AutoencoderKLFlux2
@@ -194,7 +194,7 @@ class Flux2DevPipeline(BasePipeline):
                 logger.debug(f"AutoencoderKLFlux2 not available, trying AutoencoderKL: {e}")
             # Fallback to standard VAE
             from diffusers import AutoencoderKL
-            path = ModelLoader.resolve_path(params.vae_model)
+            path = ModelLoader.resolve_path(params.vae_model, subfolder="vae")
             if path.is_file():
                 cfg = ModelLoader.resolve_config(params.vae_config, "vae")
                 if cfg:
@@ -337,7 +337,7 @@ class Flux2DevPipeline(BasePipeline):
         if len(parts) == 2 and not path_or_repo.startswith("/"):
             return AutoTokenizer.from_pretrained(path_or_repo)
 
-        path = ModelLoader.resolve_path(path_or_repo)
+        path = ModelLoader.resolve_path(path_or_repo, subfolder="tokenizer")
         if path.is_dir():
             sub = path / "tokenizer"
             if sub.exists():
@@ -356,7 +356,7 @@ class Flux2DevPipeline(BasePipeline):
         """
         from transformers import AutoModelForCausalLM
 
-        path = ModelLoader.resolve_path(path_or_repo)
+        path = ModelLoader.resolve_path(path_or_repo, subfolder="text_encoder")
 
         if path.is_file() and path.suffix == ".gguf":
             # GGUF text encoder — load via repo + filename

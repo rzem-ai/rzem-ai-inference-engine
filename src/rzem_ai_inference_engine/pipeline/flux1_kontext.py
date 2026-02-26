@@ -190,7 +190,7 @@ class Flux1KontextPipeline(Flux1DevPipeline):
         # ── Stage 2: Image encoding (VAE) ────────────────────────────
 
         def _load_vae():
-            path = ModelLoader.resolve_path(params.vae_model)
+            path = ModelLoader.resolve_path(params.vae_model, subfolder="vae")
             if path.is_file():
                 config = ModelLoader.resolve_config(params.vae_config, "vae")
                 if config:
@@ -225,15 +225,25 @@ class Flux1KontextPipeline(Flux1DevPipeline):
         finally:
             cache.unlock(_cache_key(params.vae_model, "vae"))
 
+        # Pad latents to even dimensions for pack() compatibility (2x2 patches)
+        _, _, lat_h, lat_w = image_latents.shape
+        pad_h = (2 - lat_h % 2) % 2
+        pad_w = (2 - lat_w % 2) % 2
+        if pad_h > 0 or pad_w > 0:
+            image_latents = torch.nn.functional.pad(
+                image_latents, (0, pad_w, 0, pad_h), mode="circular",
+            )
+
         # Pack image latents to sequence format for the transformer
         image_latents = self._pack_latents(image_latents)
 
         # Generate position IDs for the reference image latents
+        # idx_offset=1 distinguishes reference tokens from noise tokens (idx_offset=0)
         latent_h = math.ceil(target_h / 16) * 2
         latent_w = math.ceil(target_w / 16) * 2
         packed_h = latent_h // 2
         packed_w = latent_w // 2
-        ref_image_ids = self._generate_image_ids(packed_h, packed_w, device, dtype)
+        ref_image_ids = self._generate_image_ids(packed_h, packed_w, device, dtype, idx_offset=1)
 
         logger.info(
             "Kontext image encoded: latent shape {}, packed seq_len {}",
@@ -243,7 +253,7 @@ class Flux1KontextPipeline(Flux1DevPipeline):
         # ── Stage 3: Denoising ───────────────────────────────────────
 
         def _load_transformer():
-            path = ModelLoader.resolve_path(params.transformer_model)
+            path = ModelLoader.resolve_path(params.transformer_model, subfolder="transformer")
             if path.is_file():
                 kwargs = {"torch_dtype": dtype}
                 config = ModelLoader.resolve_config(params.transformer_config, "flux_transformer")

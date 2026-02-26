@@ -62,12 +62,31 @@ def _parse_hf_path(path_or_repo: str) -> tuple[str, str | None]:
 class ModelLoader:
     """Resolves model paths and configuration dicts."""
 
+    # Default patterns for snapshot_download — excludes docs, notebooks, images
+    _DEFAULT_ALLOW = [
+        "*.safetensors", "*.bin", "*.gguf",
+        "*.json", "*.txt", "*.model",
+        "*.tiktoken", "*.py",
+    ]
+
     @staticmethod
-    def resolve_path(path_or_repo: str) -> Path:
+    def resolve_path(
+        path_or_repo: str,
+        *,
+        subfolder: str | None = None,
+    ) -> Path:
         """Return a local Path for a model.
 
         Handles local paths, HF repo IDs, and ``repo/file`` paths.
         See module docstring for details.
+
+        Parameters
+        ----------
+        subfolder:
+            When set and downloading a full repo, restricts the download to
+            files inside this subfolder (plus root JSON configs).  This avoids
+            downloading the entire repo when only one component is needed
+            (e.g. ``subfolder="vae"`` to skip transformer weights).
         """
         # 1. Local path?
         local = Path(path_or_repo)
@@ -85,18 +104,18 @@ class ModelLoader:
             cached = hf_hub_download(repo_id=repo_id, filename=filename)
             return Path(cached)
 
-        # Full repo download
+        # Full repo download (or subfolder-scoped)
         from huggingface_hub import snapshot_download
 
-        logger.info(f"Loading repo from HuggingFace Hub: {repo_id}")
-        cached = snapshot_download(
-            repo_id=repo_id,
-            allow_patterns=[
-                "*.safetensors", "*.bin", "*.gguf",
-                "*.json", "*.txt", "*.model",
-                "*.tiktoken", "*.py",
-            ],
-        )
+        if subfolder:
+            # Only download the subfolder contents + root config files
+            allow = [f"{subfolder}/**", "*.json"]
+            logger.info(f"Loading repo from HuggingFace Hub: {repo_id} (subfolder: {subfolder})")
+        else:
+            allow = ModelLoader._DEFAULT_ALLOW
+            logger.info(f"Loading repo from HuggingFace Hub: {repo_id}")
+
+        cached = snapshot_download(repo_id=repo_id, allow_patterns=allow)
         return Path(cached)
 
     @staticmethod
