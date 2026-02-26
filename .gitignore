@@ -27,3 +27,4 @@ build/
 # Claude Code
 .claude/
 .server.pid
+uv.lock
