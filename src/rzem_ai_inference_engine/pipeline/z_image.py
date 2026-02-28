@@ -163,6 +163,7 @@ class ZImagePipeline(BasePipeline):
                 generator=generator,
                 progress_cb=progress_cb,
                 preview_config=preview_config,
+                cancel_event=cancel_event,
             )
 
             LoraApplicator.remove_hooks(lora_hooks)
@@ -186,6 +187,7 @@ class ZImagePipeline(BasePipeline):
         generator: torch.Generator,
         progress_cb: Callable[[ProgressEvent], None],
         preview_config: PreviewConfig | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> PIL.Image.Image:
         import PIL.Image
 
