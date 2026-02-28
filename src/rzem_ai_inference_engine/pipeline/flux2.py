@@ -12,6 +12,7 @@ FLUX.2 differs from FLUX.1 in several key ways:
 from __future__ import annotations
 
 import math
+import threading
 from typing import TYPE_CHECKING, Callable
 
 import torch
@@ -21,7 +22,7 @@ from rzem_ai_inference_engine.pipeline.lora_applicator import LoraApplicator
 from rzem_ai_inference_engine.models.loader import ModelLoader
 from rzem_ai_inference_engine.models.memory import preferred_dtype
 from rzem_ai_inference_engine.pipeline.base import BasePipeline
-from rzem_ai_inference_engine.types import ModelSpec, ProgressEvent, TransformerType
+from rzem_ai_inference_engine.types import JobCancelledException, ModelSpec, ProgressEvent, TransformerType
 
 if TYPE_CHECKING:
     import PIL.Image
@@ -79,6 +80,7 @@ class Flux2DevPipeline(BasePipeline):
         cache: ModelCache,
         progress_cb: Callable[[ProgressEvent], None],
         preview_config: PreviewConfig | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> tuple[PIL.Image.Image, int]:
         import PIL.Image
 
@@ -170,6 +172,7 @@ class Flux2DevPipeline(BasePipeline):
                 device=device,
                 dtype=dtype,
                 progress_cb=progress_cb,
+                cancel_event=cancel_event,
             )
 
             LoraApplicator.remove_hooks(lora_hooks)
@@ -233,6 +236,7 @@ class Flux2DevPipeline(BasePipeline):
         device: torch.device,
         dtype: torch.dtype,
         progress_cb: Callable[[ProgressEvent], None],
+        cancel_event: threading.Event | None = None,
     ) -> torch.Tensor:
         """Rectified flow Euler denoising loop."""
         num_steps = params.steps
@@ -247,6 +251,8 @@ class Flux2DevPipeline(BasePipeline):
 
         with torch.no_grad():
             for i in range(num_steps):
+                if cancel_event is not None and cancel_event.is_set():
+                    raise JobCancelledException()
                 sigma_curr = sigmas[i]
                 sigma_next = sigmas[i + 1]
 

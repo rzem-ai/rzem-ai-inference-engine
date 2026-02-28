@@ -11,6 +11,7 @@ Z-Image uses a different transformer API from FLUX:
 from __future__ import annotations
 
 import math
+import threading
 from typing import TYPE_CHECKING, Callable
 
 import torch
@@ -20,7 +21,7 @@ from rzem_ai_inference_engine.pipeline.lora_applicator import LoraApplicator
 from rzem_ai_inference_engine.models.loader import ModelLoader
 from rzem_ai_inference_engine.models.memory import preferred_dtype
 from rzem_ai_inference_engine.pipeline.base import BasePipeline
-from rzem_ai_inference_engine.types import ModelSpec, ProgressEvent, TransformerType
+from rzem_ai_inference_engine.types import JobCancelledException, ModelSpec, ProgressEvent, TransformerType
 
 if TYPE_CHECKING:
     import PIL.Image
@@ -62,6 +63,7 @@ class ZImagePipeline(BasePipeline):
         cache: ModelCache,
         progress_cb: Callable[[ProgressEvent], None],
         preview_config: PreviewConfig | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> tuple[PIL.Image.Image, int]:
         import PIL.Image
         from transformers import AutoTokenizer, Qwen3Model
@@ -243,6 +245,8 @@ class ZImagePipeline(BasePipeline):
         # ── 4. Denoising loop (Z-Image Euler) ────────────────────────
         with torch.no_grad():
             for step_idx in range(num_steps):
+                if cancel_event is not None and cancel_event.is_set():
+                    raise JobCancelledException()
                 sigma_curr = sigmas[step_idx]
                 sigma_prev = sigmas[step_idx + 1]
 

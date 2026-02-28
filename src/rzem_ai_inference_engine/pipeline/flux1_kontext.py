@@ -13,6 +13,7 @@ Stages:
 from __future__ import annotations
 
 import math
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -29,7 +30,7 @@ from rzem_ai_inference_engine.pipeline.flux1 import (
     _resolve_t5_quantization,
 )
 from rzem_ai_inference_engine.pipeline.lora_applicator import LoraApplicator
-from rzem_ai_inference_engine.types import ModelSpec, ProgressEvent, TransformerType
+from rzem_ai_inference_engine.types import JobCancelledException, ModelSpec, ProgressEvent, TransformerType
 
 if TYPE_CHECKING:
     import PIL.Image
@@ -101,6 +102,7 @@ class Flux1KontextPipeline(Flux1DevPipeline):
         cache: ModelCache,
         progress_cb: Callable[[ProgressEvent], None],
         preview_config: PreviewConfig | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> tuple[PIL.Image.Image, int]:
         import PIL.Image
         from diffusers import AutoencoderKL, FluxTransformer2DModel
@@ -159,16 +161,24 @@ class Flux1KontextPipeline(Flux1DevPipeline):
             load_kwargs: dict = {"torch_dtype": dtype}
             t5_config = ModelLoader.resolve_config(params.t5_encoder_config, "t5_encoder")
             if t5_config and (t5_config.get("load_in_4bit") or t5_config.get("load_in_8bit")):
-                from transformers import BitsAndBytesConfig
+                try:
+                    import bitsandbytes  # noqa: F401
+                except ImportError:
+                    logger.warning(
+                        "bitsandbytes is not installed on this server — loading T5 encoder "
+                        "without quantization. Install it with: pip install -U bitsandbytes>=0.46.1"
+                    )
+                else:
+                    from transformers import BitsAndBytesConfig
 
-                bnb_kwargs = dict(t5_config)
-                for key in ("bnb_4bit_compute_dtype", "bnb_8bit_compute_dtype"):
-                    if key in bnb_kwargs and isinstance(bnb_kwargs[key], str):
-                        bnb_kwargs[key] = getattr(torch, bnb_kwargs[key])
-                if t5_config.get("load_in_4bit") and "bnb_4bit_compute_dtype" not in bnb_kwargs:
-                    bnb_kwargs["bnb_4bit_compute_dtype"] = dtype
-                load_kwargs["quantization_config"] = BitsAndBytesConfig(**bnb_kwargs)
-                logger.info("Loading T5 encoder with BitsAndBytes quantization")
+                    bnb_kwargs = dict(t5_config)
+                    for key in ("bnb_4bit_compute_dtype", "bnb_8bit_compute_dtype"):
+                        if key in bnb_kwargs and isinstance(bnb_kwargs[key], str):
+                            bnb_kwargs[key] = getattr(torch, bnb_kwargs[key])
+                    if t5_config.get("load_in_4bit") and "bnb_4bit_compute_dtype" not in bnb_kwargs:
+                        bnb_kwargs["bnb_4bit_compute_dtype"] = dtype
+                    load_kwargs["quantization_config"] = BitsAndBytesConfig(**bnb_kwargs)
+                    logger.info("Loading T5 encoder with BitsAndBytes quantization")
             return T5EncoderModel.from_pretrained(path, **load_kwargs)
 
         t5_enc = cache.get_or_load(
@@ -308,6 +318,7 @@ class Flux1KontextPipeline(Flux1DevPipeline):
                 progress_cb=progress_cb,
                 preview_vae=preview_vae,
                 preview_config=preview_config,
+                cancel_event=cancel_event,
             )
 
             LoraApplicator.remove_hooks(lora_hooks)
@@ -352,6 +363,7 @@ class Flux1KontextPipeline(Flux1DevPipeline):
         progress_cb: Callable[[ProgressEvent], None],
         preview_vae=None,
         preview_config: PreviewConfig | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> torch.Tensor:
         """Rectified flow Euler denoising with input image conditioning.
 
@@ -416,6 +428,8 @@ class Flux1KontextPipeline(Flux1DevPipeline):
 
         with torch.no_grad():
             for i in range(num_steps):
+                if cancel_event is not None and cancel_event.is_set():
+                    raise JobCancelledException()
                 t_curr = sigmas[i]
                 t_next = sigmas[i + 1]
                 timestep = t_curr.expand(latents.shape[0])

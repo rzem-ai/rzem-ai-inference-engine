@@ -11,6 +11,7 @@ from rzem_ai_inference_engine.types import (
     CompletedEvent,
     EventType,
     FailedEvent,
+    JobCancelledException,
     PreviewConfig,
     ProgressEvent,
     StartedEvent,
@@ -76,7 +77,8 @@ class JobProcessor:
                     self._emit(EventType.JOB_PROGRESS, event)
 
                 # Run the pipeline
-                image, seed = pipeline.run(params, self._cache, progress_cb, self._preview_config)
+                cancel_event = self._queue.get_cancel_event(job_id)
+                image, seed = pipeline.run(params, self._cache, progress_cb, self._preview_config, cancel_event)
 
                 self._queue.mark_completed(job_id)
                 self._emit(
@@ -84,6 +86,11 @@ class JobProcessor:
                     CompletedEvent(job_id=job_id, image=image, seed=seed),
                 )
                 logger.info(f"Job completed: {job_id}")
+
+            except JobCancelledException:
+                # cancel() already set status to CANCELLED and emitted JOB_CANCELLED
+                self._queue._cancel_events.pop(job_id, None)
+                logger.info(f"Job interrupted by cancellation: {job_id}")
 
             except Exception as e:
                 self._queue.mark_failed(job_id)

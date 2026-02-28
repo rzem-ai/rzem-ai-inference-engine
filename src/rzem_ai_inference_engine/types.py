@@ -12,6 +12,10 @@ if TYPE_CHECKING:
     import torch
 
 
+class JobCancelledException(Exception):
+    """Raised inside a pipeline to cleanly interrupt a running job."""
+
+
 class TransformerType(str, Enum):
     FLUX1_DEV = "flux1_dev"
     FLUX1_KONTEXT = "flux1_kontext"

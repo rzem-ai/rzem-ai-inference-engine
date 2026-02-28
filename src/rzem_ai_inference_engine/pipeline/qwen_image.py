@@ -7,6 +7,7 @@ but with a larger transformer and true classifier-free guidance.
 from __future__ import annotations
 
 import math
+import threading
 from typing import TYPE_CHECKING, Callable
 
 import torch
@@ -17,7 +18,7 @@ from rzem_ai_inference_engine.models.loader import ModelLoader
 from rzem_ai_inference_engine.models.memory import preferred_dtype
 from rzem_ai_inference_engine.pipeline.base import BasePipeline
 from rzem_ai_inference_engine.pipeline.z_image import ZImagePipeline
-from rzem_ai_inference_engine.types import ModelSpec, ProgressEvent, TransformerType
+from rzem_ai_inference_engine.types import JobCancelledException, ModelSpec, ProgressEvent, TransformerType
 
 if TYPE_CHECKING:
     import PIL.Image
@@ -69,6 +70,7 @@ class QwenImagePipeline(BasePipeline):
         cache: ModelCache,
         progress_cb: Callable[[ProgressEvent], None],
         preview_config: PreviewConfig | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> tuple[PIL.Image.Image, int]:
         import PIL.Image
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -258,6 +260,8 @@ class QwenImagePipeline(BasePipeline):
         # ── 6. Denoising with true CFG ───────────────────────────────
         with torch.no_grad():
             for i in range(num_steps):
+                if cancel_event is not None and cancel_event.is_set():
+                    raise JobCancelledException()
                 sigma_curr = sigmas[i]
                 sigma_prev = sigmas[i + 1]
                 timestep = torch.tensor([sigma_curr], device=device, dtype=dtype).expand(latents.shape[0]) * 1000.0

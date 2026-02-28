@@ -90,14 +90,14 @@ async def get_job_image(job_id: str, request: Request) -> FileResponse:
 
 @router.delete("/jobs/{job_id}", response_model=JobResponse)
 async def cancel_job(job_id: str, request: Request) -> JobResponse:
-    """Cancel a queued job."""
+    """Cancel a queued or running job."""
     store = request.app.state.store
     engine = request.app.state.engine
 
     job = store.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status != JobStatus.QUEUED:
+    if job.status not in (JobStatus.QUEUED, JobStatus.RUNNING):
         raise HTTPException(
             status_code=409,
             detail=f"Cannot cancel job with status '{job.status.value}'",
