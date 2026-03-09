@@ -10,8 +10,12 @@ from rzem_ai_inference_engine.api.models import (
     CachedModelDetailResponse,
     CachedModelResponse,
     CachedRevisionResponse,
+    CudaVersionResponse,
+    GpuInfoResponse,
     HealthResponse,
     JobResponse,
+    StatusResponse,
+    VramResponse,
     build_job_response,
 )
 from rzem_ai_inference_engine.types import JobParams, JobStatus
@@ -181,3 +185,102 @@ async def health(request: Request) -> HealthResponse:
         jobs_running=running,
         jobs_completed=completed,
     )
+
+
+# ── GPU / VRAM / CUDA endpoints (sidecar support) ────────────────
+
+
+@router.get("/gpu-info", response_model=GpuInfoResponse)
+async def gpu_info(request: Request) -> GpuInfoResponse:
+    """Return GPU device type, name, and total VRAM."""
+    import torch
+
+    device = request.app.state.engine._device
+    device_type = device.type
+
+    device_name = None
+    total_vram_gb = None
+
+    if device_type == "cuda":
+        device_name = torch.cuda.get_device_name(device)
+        _, total = torch.cuda.mem_get_info(device)
+        total_vram_gb = round(total / (1024 ** 3), 1)
+    elif device_type == "mps":
+        device_name = "Apple Silicon (MPS)"
+
+    return GpuInfoResponse(
+        device_type=device_type,
+        device_name=device_name,
+        total_vram_gb=total_vram_gb,
+    )
+
+
+@router.get("/vram", response_model=VramResponse)
+async def vram_usage(request: Request) -> VramResponse:
+    """Return current VRAM allocation stats."""
+    import torch
+
+    device = request.app.state.engine._device
+
+    if device.type != "cuda":
+        return VramResponse(available=False)
+
+    allocated = torch.cuda.memory_allocated(device)
+    reserved = torch.cuda.memory_reserved(device)
+    free, total = torch.cuda.mem_get_info(device)
+
+    return VramResponse(
+        available=True,
+        allocated=allocated,
+        reserved=reserved,
+        free=free,
+        total=total,
+    )
+
+
+@router.post("/vram/clear", response_model=StatusResponse)
+async def clear_vram(request: Request) -> StatusResponse:
+    """Clear the VRAM model cache and run torch.cuda.empty_cache()."""
+    import torch
+
+    engine = request.app.state.engine
+    engine._cache.clear()
+
+    if engine._device.type == "cuda":
+        torch.cuda.empty_cache()
+
+    return StatusResponse(status="ok", message="VRAM cache cleared")
+
+
+@router.get("/cuda-version", response_model=CudaVersionResponse)
+async def cuda_version() -> CudaVersionResponse:
+    """Return the CUDA runtime version if available."""
+    import torch
+
+    version = torch.version.cuda if torch.cuda.is_available() else None
+    return CudaVersionResponse(cuda_version=version)
+
+
+@router.delete("/models/{repo_id:path}", response_model=StatusResponse)
+async def delete_cached_model(repo_id: str) -> StatusResponse:
+    """Delete a HuggingFace-cached model by repo_id."""
+    from huggingface_hub import scan_cache_dir
+
+    info = scan_cache_dir()
+
+    # Find the repo
+    target = None
+    for repo in info.repos:
+        if repo.repo_id == repo_id:
+            target = repo
+            break
+
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"Model '{repo_id}' not found in cache")
+
+    # Collect all revision hashes for deletion
+    revision_hashes = [rev.commit_hash for rev in target.revisions]
+    delete_strategy = info.delete_revisions(*revision_hashes)
+    delete_strategy.execute()
+
+    return StatusResponse(status="ok", message=f"Deleted {repo_id} ({len(revision_hashes)} revisions)")
