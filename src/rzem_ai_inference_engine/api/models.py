@@ -56,6 +56,29 @@ class CachedModelDetailResponse(BaseModel):
     revisions: list[CachedRevisionResponse]
 
 
+class VramResponse(BaseModel):
+    available: bool
+    allocated: int = 0
+    reserved: int = 0
+    free: int = 0
+    total: int = 0
+
+
+class GpuInfoResponse(BaseModel):
+    device_type: str
+    device_name: str | None = None
+    total_vram_gb: float | None = None
+
+
+class CudaVersionResponse(BaseModel):
+    cuda_version: str | None = None
+
+
+class StatusResponse(BaseModel):
+    status: str
+    message: str | None = None
+
+
 class HealthResponse(BaseModel):
     status: str
     device: str
