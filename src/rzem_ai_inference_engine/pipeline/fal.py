@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import random
+import threading
 from io import BytesIO
 from typing import TYPE_CHECKING, Callable
 
@@ -87,6 +88,7 @@ class FalPipeline(BasePipeline):
         cache: ModelCache,
         progress_cb: Callable[[ProgressEvent], None],
         preview_config: PreviewConfig | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> tuple[PIL.Image.Image, int]:
         import fal_client
         import httpx
